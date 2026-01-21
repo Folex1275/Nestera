@@ -111,3 +111,9 @@ fn test_group_savings_plan() {
         _ => panic!("Expected Group plan type"),
     }
 }
+
+#[test]
+fn test_data_key_admin() {
+    let key = DataKey::Admin;
+    assert_eq!(key, DataKey::Admin);
+}
