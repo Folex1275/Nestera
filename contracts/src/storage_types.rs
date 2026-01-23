@@ -1,23 +1,16 @@
-use soroban_sdk::{contracttype, Address, Symbol};
+use soroban_sdk::{contracterror, contracttype, Address, Symbol};
 
-/// User account data structure
-#[contracttype]
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct User {
-    /// Total balance across all savings
-    pub total_balance: i128,
-    /// Number of active savings accounts
-    pub savings_count: u32,
-}
-
-impl User {
-    /// Create a new user with zero balances
-    pub fn new() -> Self {
-        User {
-            total_balance: 0,
-            savings_count: 0,
-        }
-    }
+/// Error codes for the Nestera savings contract
+#[contracterror]
+#[derive(Clone, Debug, Copy, Eq, PartialEq, PartialOrd, Ord)]
+#[repr(u32)]
+pub enum SavingsError {
+    UserNotFound = 1,
+    PlanNotFound = 2,
+    Unauthorized = 3,
+    LockNotMatured = 4,
+    AlreadyWithdrawn = 5,
+    InsufficientBalance = 6,
 }
 
 /// Represents the different types of savings plans available in Nestera
@@ -53,8 +46,24 @@ pub struct SavingsPlan {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum DataKey {
     Admin,
+    Initialized,
+    AdminPublicKey,
     User(Address),
     /// Maps a (user address, plan_id) tuple to a SavingsPlan
     SavingsPlan(Address, u64),
 }
 
+/// Payload structure that the admin signs off-chain
+/// The user submits this along with the signature to mint tokens
+#[derive(Clone, Debug, Eq, PartialEq)]
+#[contracttype]
+pub struct MintPayload {
+    /// The user's address who is allowed to mint
+    pub user: Address,
+    /// The savings level or amount the user is claiming
+    pub amount: i128,
+    /// Unix timestamp when the signature was created
+    pub timestamp: u64,
+    /// Expiry duration in seconds (signature valid for timestamp + expiry_duration)
+    pub expiry_duration: u64,
+}

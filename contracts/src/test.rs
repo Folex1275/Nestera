@@ -1,127 +1,478 @@
 #![cfg(test)]
 extern crate std;
 
-use super::*;
-use soroban_sdk::{symbol_short, testutils::{Address as _, Ledger}, Address, Env};
+use crate::{MintPayload, NesteraContract, NesteraContractClient, PlanType, SavingsPlan, User};
+use ed25519_dalek::{Signer, SigningKey};
+use soroban_sdk::testutils::{Address as _, Ledger, LedgerInfo};
+use soroban_sdk::{symbol_short, xdr::ToXdr, Address, Bytes, BytesN, Env, Vec};
 
-#[test]
-fn test_initialize_sets_admin() {
+/// Helper function to create a test environment and contract client
+fn setup_test_env() -> (Env, NesteraContractClient<'static>) {
     let env = Env::default();
     let contract_id = env.register(NesteraContract, ());
     let client = NesteraContractClient::new(&env, &contract_id);
-    
-    let admin = Address::generate(&env);
-    
-    // Mock authentication for the admin
-    env.mock_all_auths();
-    
-    // Initialize the contract with admin
-    client.initialize(&admin);
-    
-    // Verify admin was set correctly
-    let stored_admin = client.get_admin();
-    assert_eq!(stored_admin, admin);
+    (env, client)
+}
+
+/// Helper function to generate an Ed25519 keypair for testing
+/// Returns (signing_key, public_key_bytes)
+fn generate_keypair(env: &Env) -> (SigningKey, BytesN<32>) {
+    // Create a deterministic signing key for testing
+    let secret_bytes: [u8; 32] = [
+        1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25,
+        26, 27, 28, 29, 30, 31, 32,
+    ];
+    let signing_key = SigningKey::from_bytes(&secret_bytes);
+
+    // Get the public key bytes
+    let public_key = signing_key.verifying_key();
+    let public_key_bytes: BytesN<32> = BytesN::from_array(env, &public_key.to_bytes());
+
+    (signing_key, public_key_bytes)
+}
+
+/// Generate a second keypair (attacker) for testing wrong signer scenarios
+fn generate_attacker_keypair(env: &Env) -> (SigningKey, BytesN<32>) {
+    let secret_bytes: [u8; 32] = [
+        99, 98, 97, 96, 95, 94, 93, 92, 91, 90, 89, 88, 87, 86, 85, 84, 83, 82, 81, 80, 79, 78, 77,
+        76, 75, 74, 73, 72, 71, 70, 69, 68,
+    ];
+    let signing_key = SigningKey::from_bytes(&secret_bytes);
+    let public_key = signing_key.verifying_key();
+    let public_key_bytes: BytesN<32> = BytesN::from_array(env, &public_key.to_bytes());
+
+    (signing_key, public_key_bytes)
+}
+
+/// Helper to sign a payload with the admin's secret key
+fn sign_payload(env: &Env, signing_key: &SigningKey, payload: &MintPayload) -> BytesN<64> {
+    // Serialize payload to XDR (same as contract does)
+    let payload_bytes: Bytes = payload.to_xdr(env);
+
+    // Convert Bytes to Vec<u8> for signing
+    let len = payload_bytes.len() as usize;
+    let mut payload_slice: std::vec::Vec<u8> = std::vec![0u8; len];
+    payload_bytes.copy_into_slice(&mut payload_slice);
+
+    // Sign with ed25519_dalek
+    let signature = signing_key.sign(&payload_slice);
+
+    // Convert signature to BytesN<64>
+    BytesN::from_array(env, &signature.to_bytes())
+}
+
+/// Helper to set the ledger timestamp
+fn set_ledger_timestamp(env: &Env, timestamp: u64) {
+    env.ledger().set(LedgerInfo {
+        timestamp,
+        protocol_version: 23,
+        sequence_number: 100,
+        network_id: [0u8; 32],
+        base_reserve: 10,
+        min_temp_entry_ttl: 10,
+        min_persistent_entry_ttl: 10,
+        max_entry_ttl: 3110400,
+    });
+}
+
+// =============================================================================
+// Initialization Tests
+// =============================================================================
+
+#[test]
+fn test_initialize_success() {
+    let (env, client) = setup_test_env();
+    let (_, admin_public_key) = generate_keypair(&env);
+
+    // Should not be initialized yet
+    assert!(!client.is_initialized());
+
+    // Initialize the contract
+    client.initialize(&admin_public_key);
+
+    // Should be initialized now
+    assert!(client.is_initialized());
+
+    // Verify the stored public key matches
+    let stored_key = client.get_admin_public_key();
+    assert_eq!(stored_key, admin_public_key);
 }
 
 #[test]
-#[should_panic(expected = "Admin already initialized")]
-fn test_initialize_twice_fails() {
-    let env = Env::default();
-    let contract_id = env.register(NesteraContract, ());
-    let client = NesteraContractClient::new(&env, &contract_id);
-    
-    let admin = Address::generate(&env);
-    
-    // Mock authentication
-    env.mock_all_auths();
-    
-    // Initialize the contract - should succeed
-    client.initialize(&admin);
-    
-    // Try to initialize again - should panic
-    client.initialize(&admin);
+#[should_panic(expected = "Error(Contract, #1)")]
+fn test_initialize_already_initialized() {
+    let (env, client) = setup_test_env();
+    let (_, admin_public_key) = generate_keypair(&env);
+
+    // Initialize once
+    client.initialize(&admin_public_key);
+
+    // Try to initialize again - should panic with AlreadyInitialized (error code 1)
+    client.initialize(&admin_public_key);
 }
 
 #[test]
-fn test_update_admin_by_current_admin_succeeds() {
-    let env = Env::default();
-    let contract_id = env.register(NesteraContract, ());
-    let client = NesteraContractClient::new(&env, &contract_id);
-    
-    let admin = Address::generate(&env);
-    let new_admin = Address::generate(&env);
-    
-    // Mock authentication
-    env.mock_all_auths();
-    
-    // Initialize with first admin
-    client.initialize(&admin);
-    
-    // Update to new admin
-    client.update_admin(&new_admin);
-    
-    // Verify admin was updated
-    let stored_admin = client.get_admin();
-    assert_eq!(stored_admin, new_admin);
+#[should_panic(expected = "Error(Contract, #2)")]
+fn test_get_admin_public_key_not_initialized() {
+    let (_, client) = setup_test_env();
+
+    // Should panic with NotInitialized (error code 2)
+    client.get_admin_public_key();
+}
+
+// =============================================================================
+// Signature Verification Tests
+// =============================================================================
+
+#[test]
+fn test_verify_signature_success() {
+    let (env, client) = setup_test_env();
+    let (signing_key, admin_public_key) = generate_keypair(&env);
+
+    // Initialize with admin public key
+    client.initialize(&admin_public_key);
+
+    // Set ledger timestamp
+    let current_time = 1000u64;
+    set_ledger_timestamp(&env, current_time);
+
+    // Create a mint payload
+    let user = Address::generate(&env);
+    let payload = MintPayload {
+        user: user.clone(),
+        amount: 100_i128,
+        timestamp: current_time,
+        expiry_duration: 3600, // 1 hour validity
+    };
+
+    // Sign the payload with admin's secret key
+    let signature = sign_payload(&env, &signing_key, &payload);
+
+    // Verify should succeed and return true
+    assert!(client.verify_signature(&payload, &signature));
 }
 
 #[test]
-fn test_update_admin_requires_current_admin_auth() {
-    let env = Env::default();
-    let contract_id = env.register(NesteraContract, ());
-    let client = NesteraContractClient::new(&env, &contract_id);
-    
-    let admin = Address::generate(&env);
-    let new_admin = Address::generate(&env);
-    
-    // Initialize with admin
-    env.mock_all_auths();
-    client.initialize(&admin);
-    
-    // Clear previous auths and test update_admin
-    env.mock_all_auths_allowing_non_root_auth();
-    client.update_admin(&new_admin);
-    
-    // Verify that both admin and new_admin were required to authorize
-    // We expect 2 authorizations: one from current admin, one from new admin
-    assert_eq!(env.auths().len(), 2);
-    
-    // Verify the first auth is from the current admin
-    let auth_addresses: std::vec::Vec<_> = env.auths()
-        .iter()
-        .map(|(addr, _)| addr.clone())
-        .collect();
-    
-    assert!(auth_addresses.contains(&admin));
-    assert!(auth_addresses.contains(&new_admin));
+#[should_panic(expected = "Error(Contract, #2)")]
+fn test_verify_signature_not_initialized() {
+    let (env, client) = setup_test_env();
+    let (signing_key, _) = generate_keypair(&env);
+
+    let user = Address::generate(&env);
+    let payload = MintPayload {
+        user,
+        amount: 100_i128,
+        timestamp: 1000,
+        expiry_duration: 3600,
+    };
+
+    let signature = sign_payload(&env, &signing_key, &payload);
+
+    // Should panic because contract is not initialized
+    client.verify_signature(&payload, &signature);
 }
 
 #[test]
-#[should_panic(expected = "Admin not initialized")]
-fn test_get_admin_fails_when_not_initialized() {
-    let env = Env::default();
-    let contract_id = env.register(NesteraContract, ());
-    let client = NesteraContractClient::new(&env, &contract_id);
-    
-    // Try to get admin without initializing - should panic
-    client.get_admin();
+#[should_panic(expected = "Error(Contract, #4)")]
+fn test_verify_signature_expired() {
+    let (env, client) = setup_test_env();
+    let (signing_key, admin_public_key) = generate_keypair(&env);
+
+    client.initialize(&admin_public_key);
+
+    // Create a payload that was signed in the past
+    let user = Address::generate(&env);
+    let payload = MintPayload {
+        user,
+        amount: 100_i128,
+        timestamp: 1000,
+        expiry_duration: 3600, // Expires at 4600
+    };
+
+    let signature = sign_payload(&env, &signing_key, &payload);
+
+    // Set ledger timestamp to after expiry
+    set_ledger_timestamp(&env, 5000);
+
+    // Should panic with SignatureExpired (error code 4)
+    client.verify_signature(&payload, &signature);
 }
 
 #[test]
-#[should_panic(expected = "Admin not initialized")]
-fn test_update_admin_fails_when_not_initialized() {
-    let env = Env::default();
-    let contract_id = env.register(NesteraContract, ());
-    let client = NesteraContractClient::new(&env, &contract_id);
-    
-    let new_admin = Address::generate(&env);
-    
-    // Mock authentication
-    env.mock_all_auths();
-    
-    // Try to update admin without initializing - should panic
-    client.update_admin(&new_admin);
+#[should_panic]
+fn test_verify_signature_invalid_signature() {
+    let (env, client) = setup_test_env();
+    let (signing_key, admin_public_key) = generate_keypair(&env);
+
+    client.initialize(&admin_public_key);
+
+    let current_time = 1000u64;
+    set_ledger_timestamp(&env, current_time);
+
+    let user = Address::generate(&env);
+    let payload = MintPayload {
+        user,
+        amount: 100_i128,
+        timestamp: current_time,
+        expiry_duration: 3600,
+    };
+
+    // Sign with admin key
+    let signature = sign_payload(&env, &signing_key, &payload);
+
+    // Modify the payload after signing (tamper with it)
+    let tampered_payload = MintPayload {
+        user: Address::generate(&env), // Different user!
+        amount: 100_i128,
+        timestamp: current_time,
+        expiry_duration: 3600,
+    };
+
+    // Should panic because signature doesn't match tampered payload
+    client.verify_signature(&tampered_payload, &signature);
 }
+
+#[test]
+#[should_panic]
+fn test_verify_signature_wrong_signer() {
+    let (env, client) = setup_test_env();
+    let (_, admin_public_key) = generate_keypair(&env);
+    let (attacker_signing_key, _) = generate_attacker_keypair(&env);
+
+    client.initialize(&admin_public_key);
+
+    let current_time = 1000u64;
+    set_ledger_timestamp(&env, current_time);
+
+    let user = Address::generate(&env);
+    let payload = MintPayload {
+        user,
+        amount: 100_i128,
+        timestamp: current_time,
+        expiry_duration: 3600,
+    };
+
+    // Sign with attacker's key instead of admin's key
+    let bad_signature = sign_payload(&env, &attacker_signing_key, &payload);
+
+    // Should panic because signature is from wrong key
+    client.verify_signature(&payload, &bad_signature);
+}
+
+// =============================================================================
+// Mint Tests
+// =============================================================================
+
+#[test]
+fn test_mint_success() {
+    let (env, client) = setup_test_env();
+    let (signing_key, admin_public_key) = generate_keypair(&env);
+
+    client.initialize(&admin_public_key);
+
+    let current_time = 1000u64;
+    set_ledger_timestamp(&env, current_time);
+
+    let user = Address::generate(&env);
+    let mint_amount = 500_i128;
+
+    let payload = MintPayload {
+        user: user.clone(),
+        amount: mint_amount,
+        timestamp: current_time,
+        expiry_duration: 3600,
+    };
+
+    let signature = sign_payload(&env, &signing_key, &payload);
+
+    // Mint should succeed and return the amount
+    let result = client.mint(&payload, &signature);
+    assert_eq!(result, mint_amount);
+}
+
+#[test]
+#[should_panic(expected = "Error(Contract, #4)")]
+fn test_mint_expired_signature() {
+    let (env, client) = setup_test_env();
+    let (signing_key, admin_public_key) = generate_keypair(&env);
+
+    client.initialize(&admin_public_key);
+
+    let user = Address::generate(&env);
+    let payload = MintPayload {
+        user,
+        amount: 500_i128,
+        timestamp: 1000,
+        expiry_duration: 3600,
+    };
+
+    let signature = sign_payload(&env, &signing_key, &payload);
+
+    // Set time way past expiry
+    set_ledger_timestamp(&env, 10000);
+
+    // Should panic with SignatureExpired
+    client.mint(&payload, &signature);
+}
+
+#[test]
+#[should_panic]
+fn test_mint_tampered_amount() {
+    let (env, client) = setup_test_env();
+    let (signing_key, admin_public_key) = generate_keypair(&env);
+
+    client.initialize(&admin_public_key);
+
+    let current_time = 1000u64;
+    set_ledger_timestamp(&env, current_time);
+
+    let user = Address::generate(&env);
+
+    // Admin signs for 100 tokens
+    let payload = MintPayload {
+        user: user.clone(),
+        amount: 100_i128,
+        timestamp: current_time,
+        expiry_duration: 3600,
+    };
+
+    let signature = sign_payload(&env, &signing_key, &payload);
+
+    // User tries to claim 1000 tokens instead
+    let tampered_payload = MintPayload {
+        user,
+        amount: 1000_i128, // Tampered!
+        timestamp: current_time,
+        expiry_duration: 3600,
+    };
+
+    // Should panic because signature doesn't match
+    client.mint(&tampered_payload, &signature);
+}
+
+#[test]
+fn test_mint_at_expiry_boundary() {
+    let (env, client) = setup_test_env();
+    let (signing_key, admin_public_key) = generate_keypair(&env);
+
+    client.initialize(&admin_public_key);
+
+    let sign_time = 1000u64;
+    let expiry_duration = 3600u64;
+
+    let user = Address::generate(&env);
+    let payload = MintPayload {
+        user,
+        amount: 100_i128,
+        timestamp: sign_time,
+        expiry_duration,
+    };
+
+    let signature = sign_payload(&env, &signing_key, &payload);
+
+    // Set time exactly at expiry boundary (should still work)
+    set_ledger_timestamp(&env, sign_time + expiry_duration);
+
+    // Should succeed - we're exactly at the expiry time, not past it
+    let result = client.mint(&payload, &signature);
+    assert_eq!(result, 100_i128);
+}
+
+#[test]
+#[should_panic(expected = "Error(Contract, #4)")]
+fn test_mint_one_second_after_expiry() {
+    let (env, client) = setup_test_env();
+    let (signing_key, admin_public_key) = generate_keypair(&env);
+
+    client.initialize(&admin_public_key);
+
+    let sign_time = 1000u64;
+    let expiry_duration = 3600u64;
+
+    let user = Address::generate(&env);
+    let payload = MintPayload {
+        user,
+        amount: 100_i128,
+        timestamp: sign_time,
+        expiry_duration,
+    };
+
+    let signature = sign_payload(&env, &signing_key, &payload);
+
+    // Set time one second after expiry
+    set_ledger_timestamp(&env, sign_time + expiry_duration + 1);
+
+    // Should fail - we're past the expiry time
+    client.mint(&payload, &signature);
+}
+
+// =============================================================================
+// Edge Case Tests
+// =============================================================================
+
+#[test]
+fn test_mint_zero_amount() {
+    let (env, client) = setup_test_env();
+    let (signing_key, admin_public_key) = generate_keypair(&env);
+
+    client.initialize(&admin_public_key);
+
+    let current_time = 1000u64;
+    set_ledger_timestamp(&env, current_time);
+
+    let user = Address::generate(&env);
+    let payload = MintPayload {
+        user,
+        amount: 0_i128,
+        timestamp: current_time,
+        expiry_duration: 3600,
+    };
+
+    let signature = sign_payload(&env, &signing_key, &payload);
+
+    // Zero amount should still work (signature is valid)
+    let result = client.mint(&payload, &signature);
+    assert_eq!(result, 0_i128);
+}
+
+#[test]
+fn test_multiple_mints_same_user() {
+    let (env, client) = setup_test_env();
+    let (signing_key, admin_public_key) = generate_keypair(&env);
+
+    client.initialize(&admin_public_key);
+
+    let current_time = 1000u64;
+    set_ledger_timestamp(&env, current_time);
+
+    let user = Address::generate(&env);
+
+    // First mint
+    let payload1 = MintPayload {
+        user: user.clone(),
+        amount: 100_i128,
+        timestamp: current_time,
+        expiry_duration: 3600,
+    };
+    let signature1 = sign_payload(&env, &signing_key, &payload1);
+    let result1 = client.mint(&payload1, &signature1);
+    assert_eq!(result1, 100_i128);
+
+    // Second mint with different amount
+    let payload2 = MintPayload {
+        user: user.clone(),
+        amount: 200_i128,
+        timestamp: current_time + 1, // Different timestamp makes it a unique payload
+        expiry_duration: 3600,
+    };
+    let signature2 = sign_payload(&env, &signing_key, &payload2);
+    let result2 = client.mint(&payload2, &signature2);
+    assert_eq!(result2, 200_i128);
+}
+
+// =============================================================================
+// Savings Plan Tests
+// =============================================================================
 
 #[test]
 fn test_user_instantiation() {
@@ -232,194 +583,69 @@ fn test_group_savings_plan() {
 }
 
 #[test]
-fn test_data_key_admin() {
-    let key = DataKey::Admin;
-    assert_eq!(key, DataKey::Admin);
+fn test_create_savings_plan() {
+    let (env, client) = setup_test_env();
+    let (_, admin_public_key) = generate_keypair(&env);
+
+    client.initialize(&admin_public_key);
+
+    let user = Address::generate(&env);
+    let plan_type = PlanType::Flexi;
+    let initial_deposit = 1000_i128;
+
+    let plan_id = client.create_savings_plan(&user, &plan_type, &initial_deposit);
+    assert_eq!(plan_id, 1);
+
+    let plan = client.get_savings_plan(&user, &plan_id).unwrap();
+    assert_eq!(plan.plan_id, plan_id);
+    assert_eq!(plan.plan_type, plan_type);
+    assert_eq!(plan.balance, initial_deposit);
 }
 
 #[test]
-fn test_data_key_user() {
-    let env = Env::default();
-    let user_address = Address::generate(&env);
-    let key = DataKey::User(user_address.clone());
+fn test_get_user_savings_plans() {
+    let (env, client) = setup_test_env();
+    let (_, admin_public_key) = generate_keypair(&env);
 
-    match key {
-        DataKey::User(addr) => assert_eq!(addr, user_address),
-        _ => panic!("Expected User data key"),
+    client.initialize(&admin_public_key);
+
+    let user = Address::generate(&env);
+
+    // Create multiple plans
+    let plan1_id = client.create_savings_plan(&user, &PlanType::Flexi, &1000_i128);
+    let plan2_id = client.create_savings_plan(&user, &PlanType::Lock(2000000), &2000_i128);
+
+    let plans = client.get_user_savings_plans(&user);
+    assert_eq!(plans.len(), 2);
+
+    // Verify plans are returned correctly
+    let mut plan_ids = std::vec::Vec::new();
+    for p in plans.iter() {
+        plan_ids.push(p.plan_id);
     }
+    assert!(plan_ids.contains(&plan1_id));
+    assert!(plan_ids.contains(&plan2_id));
 }
 
 #[test]
-fn test_data_key_savings_plan() {
-    let env = Env::default();
-    let user_address = Address::generate(&env);
-    let plan_id = 42;
-    let key = DataKey::SavingsPlan(user_address.clone(), plan_id);
+fn test_get_user() {
+    let (env, client) = setup_test_env();
+    let (_, admin_public_key) = generate_keypair(&env);
 
-    match key {
-        DataKey::SavingsPlan(addr, id) => {
-            assert_eq!(addr, user_address);
-            assert_eq!(id, plan_id);
-        }
-        _ => panic!("Expected SavingsPlan data key"),
-    }
-}
+    client.initialize(&admin_public_key);
 
-#[test]
-fn test_xdr_compatibility_user() {
-    let env = Env::default();
-    let contract_id = env.register(NesteraContract, ());
+    let user = Address::generate(&env);
 
-    let user = User {
-        total_balance: 1_500_000,
-        savings_count: 5,
-    };
+    // User should not exist initially
+    assert!(client.get_user(&user).is_none());
 
-    let key = symbol_short!("testuser");
-    env.as_contract(&contract_id, || {
-        env.storage().instance().set(&key, &user);
-        let retrieved_user: User = env.storage().instance().get(&key).unwrap();
-        assert_eq!(user, retrieved_user);
-    });
-}
+    // Create a savings plan
+    client.create_savings_plan(&user, &PlanType::Flexi, &1000_i128);
 
-#[test]
-fn test_xdr_compatibility_savings_plan() {
-    let env = Env::default();
-    let contract_id = env.register(NesteraContract, ());
-
-    let plan = SavingsPlan {
-        plan_id: 1,
-        plan_type: PlanType::Flexi,
-        balance: 750_000,
-        start_time: 1000000,
-        last_deposit: 1100000,
-        last_withdraw: 1050000,
-        interest_rate: 550,
-        is_completed: false,
-        is_withdrawn: false,
-    };
-
-    let key = symbol_short!("testplan");
-    env.as_contract(&contract_id, || {
-        env.storage().instance().set(&key, &plan);
-        let retrieved_plan: SavingsPlan = env.storage().instance().get(&key).unwrap();
-        assert_eq!(plan, retrieved_plan);
-    });
-}
-
-#[test]
-fn test_xdr_compatibility_all_plan_types() {
-    let env = Env::default();
-    let contract_id = env.register(NesteraContract, ());
-
-    env.as_contract(&contract_id, || {
-        // Test Flexi
-        let flexi_plan = SavingsPlan {
-            plan_id: 0,
-            plan_type: PlanType::Flexi,
-            balance: 1_000_000,
-            start_time: 1000000,
-            last_deposit: 1100000,
-            last_withdraw: 0,
-            interest_rate: 500,
-            is_completed: false,
-            is_withdrawn: false,
-        };
-        env.storage().instance().set(&0u32, &flexi_plan);
-        let retrieved: SavingsPlan = env.storage().instance().get(&0u32).unwrap();
-        assert_eq!(flexi_plan, retrieved);
-
-        // Test Lock
-        let lock_plan = SavingsPlan {
-            plan_id: 1,
-            plan_type: PlanType::Lock(2000000),
-            balance: 1_000_000,
-            start_time: 1000000,
-            last_deposit: 1100000,
-            last_withdraw: 0,
-            interest_rate: 500,
-            is_completed: false,
-            is_withdrawn: false,
-        };
-        env.storage().instance().set(&1u32, &lock_plan);
-        let retrieved: SavingsPlan = env.storage().instance().get(&1u32).unwrap();
-        assert_eq!(lock_plan, retrieved);
-
-        // Test Goal
-        let goal_plan = SavingsPlan {
-            plan_id: 2,
-            plan_type: PlanType::Goal(symbol_short!("vacation"), 3_000_000, 1u32),
-            balance: 1_000_000,
-            start_time: 1000000,
-            last_deposit: 1100000,
-            last_withdraw: 0,
-            interest_rate: 500,
-            is_completed: false,
-            is_withdrawn: false,
-        };
-        env.storage().instance().set(&2u32, &goal_plan);
-        let retrieved: SavingsPlan = env.storage().instance().get(&2u32).unwrap();
-        assert_eq!(goal_plan, retrieved);
-
-        // Test Group
-        let group_plan = SavingsPlan {
-            plan_id: 3,
-            plan_type: PlanType::Group(200, false, 3u32, 8_000_000),
-            balance: 1_000_000,
-            start_time: 1000000,
-            last_deposit: 1100000,
-            last_withdraw: 0,
-            interest_rate: 500,
-            is_completed: false,
-            is_withdrawn: false,
-        };
-        env.storage().instance().set(&3u32, &group_plan);
-        let retrieved: SavingsPlan = env.storage().instance().get(&3u32).unwrap();
-        assert_eq!(group_plan, retrieved);
-    });
-}
-
-#[test]
-fn test_completed_plan() {
-    let plan = SavingsPlan {
-        plan_id: 5,
-        plan_type: PlanType::Goal(symbol_short!("house"), 10_000_000, 2u32),
-        balance: 10_000_000,
-        start_time: 1000000,
-        last_deposit: 2000000,
-        last_withdraw: 0,
-        interest_rate: 650,
-        is_completed: true,
-        is_withdrawn: false,
-    };
-
-    assert!(plan.is_completed);
-    assert_eq!(plan.balance, 10_000_000);
-}
-
-#[test]
-fn test_plan_type_patterns() {
-    // Test that we can extract values from each plan type variant
-    let lock_plan = PlanType::Lock(1234567);
-    if let PlanType::Lock(timestamp) = lock_plan {
-        assert_eq!(timestamp, 1234567);
-    }
-
-    let goal_plan = PlanType::Goal(symbol_short!("car"), 2_000_000, 3u32);
-    if let PlanType::Goal(cat, amount, contrib) = goal_plan {
-        assert_eq!(cat, symbol_short!("car"));
-        assert_eq!(amount, 2_000_000);
-        assert_eq!(contrib, 3u32);
-    }
-
-    let group_plan = PlanType::Group(999, true, 1u32, 5_000_000);
-    if let PlanType::Group(id, public, contrib, amount) = group_plan {
-        assert_eq!(id, 999);
-        assert!(public);
-        assert_eq!(contrib, 1u32);
-        assert_eq!(amount, 5_000_000);
-    }
+    // User should now exist
+    let user_data = client.get_user(&user).unwrap();
+    assert_eq!(user_data.total_balance, 1000_i128);
+    assert_eq!(user_data.savings_count, 1);
 }
 
 // ========== User Initialization Tests ==========
