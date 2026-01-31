@@ -290,6 +290,11 @@ impl NesteraContract {
         group::contribute_to_group_save(&env, user, group_id, amount)
     }
 
+    pub fn break_group_save(env: Env, user: Address, group_id: u64) -> Result<(), SavingsError> {
+        ensure_not_paused(&env)?;
+        group::break_group_save(&env, user, group_id)
+    }
+
     // --- Admin Control Functions ---
 
     pub fn set_admin(
