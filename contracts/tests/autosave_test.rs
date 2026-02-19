@@ -285,9 +285,9 @@ mod autosave_tests {
         let results = client.execute_due_autosaves(&schedule_ids);
 
         assert_eq!(results.len(), 5);
-        assert_eq!(results.get(0).unwrap(), true);  // id1: due, active -> executed
+        assert_eq!(results.get(0).unwrap(), true); // id1: due, active -> executed
         assert_eq!(results.get(1).unwrap(), false); // id2: not due -> skipped
-        assert_eq!(results.get(2).unwrap(), true);  // id3: due, active -> executed
+        assert_eq!(results.get(2).unwrap(), true); // id3: due, active -> executed
         assert_eq!(results.get(3).unwrap(), false); // id4: inactive -> skipped
         assert_eq!(results.get(4).unwrap(), false); // fake_id: not found -> skipped
 
