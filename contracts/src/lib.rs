@@ -14,6 +14,7 @@ mod group;
 mod invariants;
 mod lock;
 
+pub mod rewards;
 mod storage_types;
 mod ttl;
 mod upgrade;
