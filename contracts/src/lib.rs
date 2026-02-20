@@ -12,6 +12,7 @@ mod goal;
 mod group;
 mod lock;
 mod storage_types;
+mod ttl;
 mod users;
 
 mod rates;
@@ -43,11 +44,14 @@ impl From<ContractError> for soroban_sdk::Error {
 pub struct NesteraContract;
 
 pub(crate) fn ensure_not_paused(env: &Env) -> Result<(), SavingsError> {
-    let is_paused: bool = env
-        .storage()
-        .persistent()
-        .get(&DataKey::Paused)
-        .unwrap_or(false);
+    let paused_key = DataKey::Paused;
+    let is_paused: bool = env.storage().persistent().get(&paused_key).unwrap_or(false);
+
+    // Extend TTL on config check (only if the key exists)
+    if env.storage().persistent().has(&paused_key) {
+        ttl::extend_config_ttl(env, &paused_key);
+    }
+
     if is_paused {
         Err(SavingsError::ContractPaused)
     } else {
@@ -75,6 +79,13 @@ impl NesteraContract {
             .set(&DataKey::AdminPublicKey, &admin_public_key);
         env.storage().instance().set(&DataKey::Initialized, &true);
         env.storage().persistent().set(&DataKey::Paused, &false);
+
+        // Extend TTL for paused state
+        ttl::extend_config_ttl(&env, &DataKey::Paused);
+
+        // Extend instance TTL
+        ttl::extend_instance_ttl(&env);
+
         env.events()
             .publish((symbol_short!("init"),), admin_public_key);
     }
@@ -373,6 +384,10 @@ impl NesteraContract {
         }
 
         env.storage().persistent().set(&DataKey::Paused, &true);
+
+        // Extend TTL on config update
+        ttl::extend_config_ttl(&env, &DataKey::Paused);
+
         env.events().publish((symbol_short!("pause"), admin), ());
         Ok(())
     }
@@ -387,6 +402,10 @@ impl NesteraContract {
         }
 
         env.storage().persistent().set(&DataKey::Paused, &false);
+
+        // Extend TTL on config update
+        ttl::extend_config_ttl(&env, &DataKey::Paused);
+
         env.events().publish((symbol_short!("unpause"), admin), ());
         Ok(())
     }
@@ -399,10 +418,15 @@ impl NesteraContract {
     }
 
     pub fn is_paused(env: Env) -> bool {
-        env.storage()
-            .persistent()
-            .get(&DataKey::Paused)
-            .unwrap_or(false)
+        let paused_key = DataKey::Paused;
+        let is_paused = env.storage().persistent().get(&paused_key).unwrap_or(false);
+
+        // Extend TTL on read (only if the key exists)
+        if env.storage().persistent().has(&paused_key) {
+            ttl::extend_config_ttl(&env, &paused_key);
+        }
+
+        is_paused
     }
 
     pub fn get_flexi_rate(env: Env) -> i128 {
@@ -478,5 +502,6 @@ mod admin_tests;
 #[cfg(test)]
 mod rates_test;
 #[cfg(test)]
-#[cfg(test)]
 mod test;
+#[cfg(test)]
+mod ttl_tests;
