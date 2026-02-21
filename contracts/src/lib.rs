@@ -590,11 +590,11 @@ impl NesteraContract {
             .get(&DataKey::Admin)
             .ok_or(SavingsError::Unauthorized)?;
         stored_admin.require_auth();
-        
+
         if admin != stored_admin {
             return Err(SavingsError::Unauthorized);
         }
-        
+
         let config = rewards::storage_types::RewardsConfig {
             points_per_token,
             streak_bonus_bps,
@@ -606,7 +606,7 @@ impl NesteraContract {
             max_daily_points,
             max_streak_multiplier,
         };
-        
+
         rewards::config::initialize_rewards_config(&env, config)
     }
 

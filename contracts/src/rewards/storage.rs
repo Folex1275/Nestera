@@ -127,33 +127,36 @@ pub fn award_deposit_points(env: &Env, user: Address, amount: i128) -> Result<()
         Ok(config) if config.enabled => config,
         _ => return Ok(()),
     };
-    
+
     // ANTI-FARMING: Check minimum deposit size
     if amount < config.min_deposit_for_rewards {
         return Ok(()); // No rewards for micro-deposits
     }
-    
+
     let mut user_rewards = get_user_rewards(env, user.clone());
     let now = env.ledger().timestamp();
     let current_day = now / 86400;
-    
+
     // ANTI-FARMING: Check action cooldown (skip for first ever action)
-    let is_first_action = user_rewards.last_action_timestamp == 0 && user_rewards.current_streak == 0;
-    if !is_first_action && now.saturating_sub(user_rewards.last_action_timestamp) < config.action_cooldown_seconds {
+    let is_first_action =
+        user_rewards.last_action_timestamp == 0 && user_rewards.current_streak == 0;
+    if !is_first_action
+        && now.saturating_sub(user_rewards.last_action_timestamp) < config.action_cooldown_seconds
+    {
         return Ok(()); // Too soon after last action
     }
-    
+
     // ANTI-FARMING: Reset daily counter if new day
     if current_day > user_rewards.last_reward_day {
         user_rewards.daily_points_earned = 0;
         user_rewards.last_reward_day = current_day;
     }
-    
+
     // ANTI-FARMING: Check daily points cap
     if user_rewards.daily_points_earned >= config.max_daily_points {
         return Ok(()); // Daily limit reached
     }
-    
+
     // 2. Update streak first (time-window boundary handling)
     let streak = update_streak(env, user.clone())?;
     user_rewards = get_user_rewards(env, user.clone()); // Refresh after streak update
@@ -173,15 +176,17 @@ pub fn award_deposit_points(env: &Env, user: Address, amount: i128) -> Result<()
     } else {
         0
     };
-    
+
     let total_points_awarded = base_points
         .checked_add(streak_bonus_points)
         .ok_or(SavingsError::Overflow)?;
-    
+
     // ANTI-FARMING: Cap to remaining daily allowance
-    let remaining_daily = config.max_daily_points.saturating_sub(user_rewards.daily_points_earned);
+    let remaining_daily = config
+        .max_daily_points
+        .saturating_sub(user_rewards.daily_points_earned);
     let capped_points = total_points_awarded.min(remaining_daily);
-    
+
     if capped_points == 0 {
         return Ok(()); // Nothing to award after capping
     }
@@ -191,7 +196,7 @@ pub fn award_deposit_points(env: &Env, user: Address, amount: i128) -> Result<()
         .total_points
         .checked_add(capped_points)
         .ok_or(SavingsError::Overflow)?;
-    
+
     user_rewards.daily_points_earned = user_rewards
         .daily_points_earned
         .checked_add(capped_points)

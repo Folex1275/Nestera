@@ -1,9 +1,9 @@
 #![cfg(test)]
-use Nestera::{NesteraContract, NesteraContractClient, PlanType};
 use soroban_sdk::{
     testutils::{Address as _, Ledger, LedgerInfo},
     Address, BytesN, Env,
 };
+use Nestera::{NesteraContract, NesteraContractClient, PlanType};
 
 fn create_test_env() -> (Env, NesteraContractClient<'static>, Address, Address) {
     let env = Env::default();
@@ -24,16 +24,15 @@ fn create_test_env() -> (Env, NesteraContractClient<'static>, Address, Address) 
 
 fn setup_rewards_config(_env: &Env, client: &NesteraContractClient, admin: &Address) {
     client.init_rewards_config(
-        admin,
-        &10,      // points_per_token
-        &500,     // streak_bonus_bps (5%)
-        &1000,    // long_lock_bonus_bps (10%)
-        &100,     // goal_completion_bonus
-        &true,    // enabled
-        &100,     // min_deposit_for_rewards
-        &60,      // action_cooldown_seconds
-        &10_000,  // max_daily_points
-        &2_000,   // max_streak_multiplier (20%)
+        admin, &10,     // points_per_token
+        &500,    // streak_bonus_bps (5%)
+        &1000,   // long_lock_bonus_bps (10%)
+        &100,    // goal_completion_bonus
+        &true,   // enabled
+        &100,    // min_deposit_for_rewards
+        &60,     // action_cooldown_seconds
+        &10_000, // max_daily_points
+        &2_000,  // max_streak_multiplier (20%)
     );
 }
 
@@ -49,8 +48,14 @@ fn test_micro_deposit_spam_no_rewards() {
 
     // Check user has no rewards
     let rewards = client.get_user_rewards(&user);
-    assert_eq!(rewards.total_points, 0, "Micro-deposits should not earn rewards");
-    assert_eq!(rewards.daily_points_earned, 0, "Daily points should be zero");
+    assert_eq!(
+        rewards.total_points, 0,
+        "Micro-deposits should not earn rewards"
+    );
+    assert_eq!(
+        rewards.daily_points_earned, 0,
+        "Daily points should be zero"
+    );
 }
 
 #[test]
@@ -60,18 +65,28 @@ fn test_minimum_deposit_threshold() {
 
     // Verify rewards config was set up correctly
     let config = client.get_rewards_config();
-    assert_eq!(config.min_deposit_for_rewards, 100, "Config should be initialized");
+    assert_eq!(
+        config.min_deposit_for_rewards, 100,
+        "Config should be initialized"
+    );
     assert_eq!(config.enabled, true, "Rewards should be enabled");
 
     // Deposit below minimum - should not earn rewards
     client.deposit_flexi(&user, &99);
     let rewards1 = client.get_user_rewards(&user);
-    assert_eq!(rewards1.total_points, 0, "Below minimum should earn no rewards");
+    assert_eq!(
+        rewards1.total_points, 0,
+        "Below minimum should earn no rewards"
+    );
 
     // Deposit at minimum - should earn rewards
     client.deposit_flexi(&user, &100);
     let rewards2 = client.get_user_rewards(&user);
-    assert!(rewards2.total_points > 0, "At minimum should earn rewards: got {}", rewards2.total_points);
+    assert!(
+        rewards2.total_points > 0,
+        "At minimum should earn rewards: got {}",
+        rewards2.total_points
+    );
 }
 
 #[test]
@@ -90,7 +105,7 @@ fn test_combined_abuse_scenario() {
     }
 
     let rewards_immediate = client.get_user_rewards(&user);
-    
+
     // Should not get rewards from micro-deposits
     assert_eq!(
         rewards_immediate.total_points, 0,
@@ -105,15 +120,15 @@ fn test_daily_points_tracking() {
 
     // Make a deposit that earns rewards
     client.deposit_flexi(&user, &1000);
-    
+
     let rewards = client.get_user_rewards(&user);
-    
+
     // Daily points should be tracked
     assert_eq!(
         rewards.daily_points_earned, rewards.total_points,
         "Daily points should match total on first day"
     );
-    
+
     // Check that daily tracking is working (last_reward_day is set to current day)
     assert!(
         rewards.daily_points_earned > 0,
@@ -131,7 +146,13 @@ fn test_overflow_protection_basic() {
 
     // Should not panic or overflow
     let rewards = client.get_user_rewards(&user);
-    assert!(rewards.total_points > 0, "Should accumulate points without overflow");
+    assert!(
+        rewards.total_points > 0,
+        "Should accumulate points without overflow"
+    );
     assert!(rewards.total_points < u128::MAX, "Should not overflow u128");
-    assert!(rewards.lifetime_deposited > 0, "Should track lifetime deposits");
+    assert!(
+        rewards.lifetime_deposited > 0,
+        "Should track lifetime deposits"
+    );
 }
