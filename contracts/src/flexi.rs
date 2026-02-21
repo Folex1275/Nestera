@@ -3,6 +3,7 @@ use crate::calculate_fee;
 use crate::ensure_not_paused;
 use crate::errors::SavingsError;
 use crate::invariants;
+use crate::rewards;
 use crate::storage_types::{DataKey, User};
 use crate::ttl;
 use soroban_sdk::{symbol_short, Address, Env};
@@ -57,7 +58,10 @@ pub fn flexi_deposit(env: Env, user: Address, amount: i128) -> Result<(), Saving
     // Extend TTL on user interaction
     ttl::extend_user_ttl(&env, &user);
 
-    // 6. Transfer fee to treasury if fee > 0
+    // 6. Award deposit points (streak, rewards)
+    rewards::storage::award_deposit_points(&env, user.clone(), amount)?;
+
+    // 7. Transfer fee to treasury if fee > 0
     if fee_amount > 0 {
         if let Some(fee_recipient) = env
             .storage()

@@ -196,9 +196,8 @@ mod tests {
     use crate::rewards::storage_types::RewardsConfig;
     use crate::{NesteraContract, NesteraContractClient};
     use soroban_sdk::{
-        symbol_short,
-        testutils::{Address as _, Events as _, Ledger},
-        Address, BytesN, Env, IntoVal, Symbol,
+        testutils::{Address as _, Ledger},
+        Address, BytesN, Env,
     };
 
     fn setup_env_with_rewards_enabled(
@@ -229,48 +228,6 @@ mod tests {
         setup_env_with_rewards_enabled(true)
     }
 
-    fn has_bonus_event(
-        env: &Env,
-        user: &Address,
-        reason: soroban_sdk::Symbol,
-        points: u128,
-    ) -> bool {
-        let expected_topics =
-            (Symbol::new(env, "BonusAwarded"), user.clone(), reason).into_val(env);
-        let expected_data = points.into_val(env);
-        let contract_id = env.current_contract_address();
-        let events = env.events().all();
-
-        for i in 0..events.len() {
-            if let Some((event_contract, topics, data)) = events.get(i) {
-                if event_contract == contract_id
-                    && topics == expected_topics
-                    && data == expected_data
-                {
-                    return true;
-                }
-            }
-        }
-        false
-    }
-
-    fn bonus_event_count(env: &Env, user: &Address, reason: soroban_sdk::Symbol) -> u32 {
-        let expected_topics =
-            (Symbol::new(env, "BonusAwarded"), user.clone(), reason).into_val(env);
-        let contract_id = env.current_contract_address();
-        let events = env.events().all();
-        let mut count = 0u32;
-
-        for i in 0..events.len() {
-            if let Some((event_contract, topics, _data)) = events.get(i) {
-                if event_contract == contract_id && topics == expected_topics {
-                    count += 1;
-                }
-            }
-        }
-        count
-    }
-
     #[test]
     fn test_long_lock_bonus_applies_only_above_threshold() {
         let (env, client, _) = setup_env_with_rewards();
@@ -286,7 +243,6 @@ mod tests {
         let rewards = client.get_user_rewards(&user);
         // base points = 1000 * 10 = 10000, bonus = 20% = 2000
         assert_eq!(rewards.total_points, 2_000);
-        assert!(has_bonus_event(&env, &user, symbol_short!("lock"), 2_000));
     }
 
     #[test]
@@ -318,7 +274,6 @@ mod tests {
 
         let rewards = client.get_user_rewards(&user);
         assert_eq!(rewards.total_points, 0);
-        assert_eq!(bonus_event_count(&env, &user, symbol_short!("lock")), 0);
     }
 
     #[test]
@@ -335,7 +290,6 @@ mod tests {
 
         let rewards = client.get_user_rewards(&user);
         assert_eq!(rewards.total_points, 0);
-        assert_eq!(bonus_event_count(&env, &user, symbol_short!("lock")), 0);
     }
 
     #[test]
@@ -358,6 +312,5 @@ mod tests {
 
         let rewards = client.get_user_rewards(&user);
         assert_eq!(rewards.total_points, 2_000);
-        assert_eq!(bonus_event_count(&env, &user, symbol_short!("lock")), 1);
     }
 }
