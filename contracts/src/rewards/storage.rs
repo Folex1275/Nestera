@@ -162,7 +162,11 @@ pub fn award_deposit_points(env: &Env, user: Address, amount: i128) -> Result<()
 
     if streak_bonus_points > 0 {
         env.events().publish(
-            (Symbol::new(env, "BonusAwarded"), user, symbol_short!("streak")),
+            (
+                Symbol::new(env, "BonusAwarded"),
+                user,
+                symbol_short!("streak"),
+            ),
             streak_bonus_points,
         );
     }
@@ -204,7 +208,11 @@ pub fn award_long_lock_bonus(
 
     add_points(env, user.clone(), bonus_points)?;
     env.events().publish(
-        (Symbol::new(env, "BonusAwarded"), user, symbol_short!("lock")),
+        (
+            Symbol::new(env, "BonusAwarded"),
+            user,
+            symbol_short!("lock"),
+        ),
         bonus_points,
     );
     Ok(bonus_points)
@@ -224,7 +232,11 @@ pub fn award_goal_completion_bonus(env: &Env, user: Address) -> Result<u128, Sav
     let bonus_points = config.goal_completion_bonus as u128;
     add_points(env, user.clone(), bonus_points)?;
     env.events().publish(
-        (Symbol::new(env, "BonusAwarded"), user, symbol_short!("goal")),
+        (
+            Symbol::new(env, "BonusAwarded"),
+            user,
+            symbol_short!("goal"),
+        ),
         bonus_points,
     );
     Ok(bonus_points)
@@ -235,9 +247,14 @@ mod tests {
     use super::{STREAK_BONUS_THRESHOLD, STREAK_WINDOW_SECS};
     use crate::rewards::storage_types::RewardsConfig;
     use crate::{NesteraContract, NesteraContractClient, PlanType};
-    use soroban_sdk::{testutils::{Address as _, Ledger}, Address, BytesN, Env};
+    use soroban_sdk::{
+        testutils::{Address as _, Ledger},
+        Address, BytesN, Env,
+    };
 
-    fn setup_env_with_rewards(config: RewardsConfig) -> (Env, NesteraContractClient<'static>, Address) {
+    fn setup_env_with_rewards(
+        config: RewardsConfig,
+    ) -> (Env, NesteraContractClient<'static>, Address) {
         let env = Env::default();
         let contract_id = env.register(NesteraContract, ());
         let client = NesteraContractClient::new(&env, &contract_id);
@@ -272,7 +289,8 @@ mod tests {
         let user = Address::generate(&env);
 
         create_plan_deposit(&client, &user, 100);
-        env.ledger().with_mut(|li| li.timestamp += STREAK_WINDOW_SECS - 1);
+        env.ledger()
+            .with_mut(|li| li.timestamp += STREAK_WINDOW_SECS - 1);
         create_plan_deposit(&client, &user, 100);
 
         let rewards = client.get_user_rewards(&user);
@@ -285,7 +303,8 @@ mod tests {
         let user = Address::generate(&env);
 
         create_plan_deposit(&client, &user, 100);
-        env.ledger().with_mut(|li| li.timestamp += STREAK_WINDOW_SECS);
+        env.ledger()
+            .with_mut(|li| li.timestamp += STREAK_WINDOW_SECS);
         create_plan_deposit(&client, &user, 100);
 
         let rewards = client.get_user_rewards(&user);
@@ -298,7 +317,8 @@ mod tests {
         let user = Address::generate(&env);
 
         create_plan_deposit(&client, &user, 100);
-        env.ledger().with_mut(|li| li.timestamp += STREAK_WINDOW_SECS + 1);
+        env.ledger()
+            .with_mut(|li| li.timestamp += STREAK_WINDOW_SECS + 1);
         create_plan_deposit(&client, &user, 100);
 
         let rewards = client.get_user_rewards(&user);
@@ -344,9 +364,11 @@ mod tests {
         let user = Address::generate(&env);
 
         assert_eq!(client.update_streak(&user).unwrap(), 1);
-        env.ledger().with_mut(|li| li.timestamp += STREAK_WINDOW_SECS);
+        env.ledger()
+            .with_mut(|li| li.timestamp += STREAK_WINDOW_SECS);
         assert_eq!(client.update_streak(&user).unwrap(), 2);
-        env.ledger().with_mut(|li| li.timestamp += STREAK_WINDOW_SECS + 1);
+        env.ledger()
+            .with_mut(|li| li.timestamp += STREAK_WINDOW_SECS + 1);
         assert_eq!(client.update_streak(&user).unwrap(), 1);
     }
 }
