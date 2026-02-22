@@ -1,6 +1,5 @@
 import React from 'react';
 import Hero from '../sections/Hero/Hero';
-import HowItWorks from '../sections/HowItWorks/HowItWorks';
 import SavingsProducts from '../components/SavingsProducts';
 import FAQ from '../components/FAQ';
 
@@ -16,7 +15,7 @@ const LandingPage: React.FC = () => {
         imageAlt="Glowing crypto vault with gold coins"
         stat={{ label: 'Annual Yield', value: '12% APY' }}
       />
-      <HowItWorks />
+     
       <SavingsProducts />
       <FAQ />
     </main>
