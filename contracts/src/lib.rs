@@ -10,6 +10,7 @@ mod config;
 mod errors;
 mod flexi;
 mod goal;
+mod governance;
 mod group;
 mod invariants;
 mod lock;
@@ -772,12 +773,31 @@ impl NesteraContract {
     pub fn version(env: Env) -> u32 {
         upgrade::get_version(&env)
     }
+
+    // ========== Governance Functions ==========
+
+    /// Gets the voting power for a user based on their lifetime deposited funds
+    pub fn get_voting_power(env: Env, user: Address) -> u128 {
+        governance::get_voting_power(&env, &user)
+    }
+
+    /// Casts a weighted vote on a proposal
+    pub fn cast_vote(
+        env: Env,
+        user: Address,
+        proposal_id: u64,
+        support: bool,
+    ) -> Result<(), SavingsError> {
+        governance::cast_vote(&env, user, proposal_id, support)
+    }
 }
 
 #[cfg(test)]
 mod admin_tests;
 #[cfg(test)]
 mod config_tests;
+#[cfg(test)]
+mod governance_tests;
 #[cfg(test)]
 mod rates_test;
 #[cfg(test)]
