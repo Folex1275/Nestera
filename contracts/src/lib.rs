@@ -776,6 +776,46 @@ impl NesteraContract {
 
     // ========== Governance Functions ==========
 
+    /// Initializes voting configuration (admin only)
+    pub fn init_voting_config(
+        env: Env,
+        admin: Address,
+        quorum: u32,
+        voting_period: u64,
+        timelock_duration: u64,
+    ) -> Result<(), SavingsError> {
+        let config = governance::VotingConfig {
+            quorum,
+            voting_period,
+            timelock_duration,
+        };
+        governance::init_voting_config(&env, admin, config)
+    }
+
+    /// Gets the voting configuration
+    pub fn get_voting_config(env: Env) -> Result<governance::VotingConfig, SavingsError> {
+        governance::get_voting_config(&env)
+    }
+
+    /// Creates a new governance proposal
+    pub fn create_proposal(
+        env: Env,
+        creator: Address,
+        description: String,
+    ) -> Result<u64, SavingsError> {
+        governance::create_proposal(&env, creator, description)
+    }
+
+    /// Gets a proposal by ID
+    pub fn get_proposal(env: Env, proposal_id: u64) -> Option<governance::Proposal> {
+        governance::get_proposal(&env, proposal_id)
+    }
+
+    /// Lists all proposal IDs
+    pub fn list_proposals(env: Env) -> Vec<u64> {
+        governance::list_proposals(&env)
+    }
+
     /// Gets the voting power for a user based on their lifetime deposited funds
     pub fn get_voting_power(env: Env, user: Address) -> u128 {
         governance::get_voting_power(&env, &user)
