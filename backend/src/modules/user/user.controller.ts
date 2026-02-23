@@ -11,15 +11,16 @@ import {
 import { UserService } from './user.service';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
+import { CurrentUser } from '../../common/decorators/current-user.decorator';
 
 @Controller('users')
 @UseGuards(JwtAuthGuard)
 export class UserController {
-  constructor(private readonly userService: UserService) {}
+  constructor(private readonly userService: UserService) { }
 
   @Get('me')
-  getMe(@Request() req: { user: { id: string } }) {
-    return this.userService.findById(req.user.id);
+  getMe(@CurrentUser() user: { id: string }) {
+    return this.userService.findById(user.id);
   }
 
   @Get(':id')
@@ -29,14 +30,14 @@ export class UserController {
 
   @Patch('me')
   updateMe(
-    @Request() req: { user: { id: string } },
+    @CurrentUser() user: { id: string },
     @Body() dto: UpdateUserDto,
   ) {
-    return this.userService.update(req.user.id, dto);
+    return this.userService.update(user.id, dto);
   }
 
   @Delete('me')
-  deleteMe(@Request() req: { user: { id: string } }) {
-    return this.userService.remove(req.user.id);
+  deleteMe(@CurrentUser() user: { id: string }) {
+    return this.userService.remove(user.id);
   }
 }
