@@ -4,8 +4,13 @@ import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import configuration from './config/configuration';
 import { envValidationSchema } from './config/env.validation';
+import { PrismaModule } from './prisma/prisma.module';
+import { AuthModule } from './auth/auth.module';
 import { HealthModule } from './modules/health/health.module';
 import { BlockchainModule } from './modules/blockchain/blockchain.module';
+import { UserModule } from './modules/user/user.module';
+import { MailModule } from './modules/mail/mail.module';
+import { RedisCacheModule } from './modules/cache/cache.module';
 
 @Module({
   imports: [
@@ -18,8 +23,13 @@ import { BlockchainModule } from './modules/blockchain/blockchain.module';
         abortEarly: true,
       },
     }),
+    PrismaModule,
+    AuthModule,
+    RedisCacheModule,
     HealthModule,
     BlockchainModule,
+    UserModule,
+    MailModule,
   ],
   controllers: [AppController],
   providers: [AppService],
