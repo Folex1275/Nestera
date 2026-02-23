@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import {
   Asset,
   Horizon,
+  Keypair,
   Networks,
   rpc,
   Transaction,
@@ -58,5 +59,13 @@ export class StellarService implements OnModuleInit {
     // Implementation for querying smart contracts
     this.logger.log(`Querying contract ${contractId}, method ${method}`);
     // return this.rpcServer.simulateTransaction(...)
+  }
+
+  generateKeypair(): { publicKey: string; secretKey: string } {
+    const keypair = Keypair.random();
+    return {
+      publicKey: keypair.publicKey(),
+      secretKey: keypair.secret(),
+    };
   }
 }
