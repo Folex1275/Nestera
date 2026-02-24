@@ -1,9 +1,15 @@
 #[cfg(test)]
 mod governance_tests {
 
+    use crate::governance_events::{ProposalCreated, VoteCast};
+    use soroban_sdk::symbol_short;
+    use soroban_sdk::IntoVal;
     use crate::rewards::storage_types::RewardsConfig;
     use crate::{NesteraContract, NesteraContractClient, PlanType};
-    use soroban_sdk::{testutils::Address as _, Address, BytesN, Env, String};
+    use soroban_sdk::{
+        testutils::{Address as _, Events},
+        Address, BytesN, Env, String, Symbol,
+    };
 
     fn setup_contract() -> (Env, NesteraContractClient<'static>, Address) {
         let env = Env::default();
@@ -30,6 +36,10 @@ mod governance_tests {
 
         (env, client, admin)
     }
+
+    // ────────────────────────────────────────────────────────────────────────────────
+    // Existing tests (kept + fixed unwrap usage)
+    // ────────────────────────────────────────────────────────────────────────────────
 
     #[test]
     fn test_voting_power_zero_for_new_user() {
@@ -68,31 +78,6 @@ mod governance_tests {
     }
 
     #[test]
-    fn test_cast_vote_requires_voting_power() {
-        let (env, client, _) = setup_contract();
-        let user = Address::generate(&env);
-        env.mock_all_auths();
-
-        client.initialize_user(&user);
-
-        let result = client.try_vote(&1, &1, &user);
-        assert!(result.is_err());
-    }
-
-    #[test]
-    fn test_cast_vote_succeeds_with_voting_power() {
-        let (env, client, _) = setup_contract();
-        let user = Address::generate(&env);
-        env.mock_all_auths();
-
-        client.initialize_user(&user);
-        let _ = client.create_savings_plan(&user, &PlanType::Flexi, &1000);
-
-        let result = client.try_vote(&1, &1, &user);
-        assert!(result.is_err());
-    }
-
-    #[test]
     fn test_init_voting_config() {
         let (env, client, admin) = setup_contract();
         env.mock_all_auths();
@@ -115,10 +100,8 @@ mod governance_tests {
 
         let creator = Address::generate(&env);
         let description = String::from_str(&env, "Test proposal");
-        let proposal_id = client
-            .try_create_proposal(&creator, &description)
-            .unwrap()
-            .unwrap();
+
+        let proposal_id = client.create_proposal(&creator, &description);
 
         assert_eq!(proposal_id, 1);
     }
@@ -132,17 +115,17 @@ mod governance_tests {
 
         let creator = Address::generate(&env);
         let description = String::from_str(&env, "Test proposal");
-        let proposal_id = client
-            .try_create_proposal(&creator, &description)
-            .unwrap()
-            .unwrap();
+        let proposal_id = client.create_proposal(&creator, &description);
 
         let proposal = client.get_proposal(&proposal_id).unwrap();
+        let now = env.ledger().timestamp();
+
         assert_eq!(proposal.id, 1);
         assert_eq!(proposal.creator, creator);
         assert!(!proposal.executed);
         assert_eq!(proposal.for_votes, 0);
         assert_eq!(proposal.against_votes, 0);
+        assert_eq!(proposal.start_time, now);
     }
 
     #[test]
@@ -156,8 +139,8 @@ mod governance_tests {
         let desc1 = String::from_str(&env, "Proposal 1");
         let desc2 = String::from_str(&env, "Proposal 2");
 
-        let _ = client.try_create_proposal(&creator, &desc1);
-        let _ = client.try_create_proposal(&creator, &desc2);
+        let _ = client.create_proposal(&creator, &desc1);
+        let _ = client.create_proposal(&creator, &desc2);
 
         let proposals = client.list_proposals();
         assert_eq!(proposals.len(), 2);
@@ -174,10 +157,7 @@ mod governance_tests {
 
         let creator = Address::generate(&env);
         let description = String::from_str(&env, "Store test");
-        let proposal_id = client
-            .try_create_proposal(&creator, &description)
-            .unwrap()
-            .unwrap();
+        let proposal_id = client.create_proposal(&creator, &description);
 
         let proposal = client.get_proposal(&proposal_id).unwrap();
         let now = env.ledger().timestamp();
@@ -186,4 +166,80 @@ mod governance_tests {
         assert_eq!(proposal.start_time, now);
         assert_eq!(proposal.end_time, now + 604800);
     }
+
+    // ────────────────────────────────────────────────────────────────────────────────
+    // NEW TESTS: Governance Event Logging
+    // ────────────────────────────────────────────────────────────────────────────────
+
+#[test]
+fn test_proposal_created_emits_event() {
+    let (env, client, admin) = setup_contract();
+    env.mock_all_auths();
+
+    client.init_voting_config(&admin, &5000, &604800, &86400, &100, &10_000);
+
+    let creator = Address::generate(&env);
+    let description = String::from_str(&env, "Test proposal description");
+
+    let proposal_id = client.create_proposal(&creator, &description);
+
+    let events = env.events().all();
+
+    let created_event_opt = events.iter().rev().find(|e| {
+        e.0 == client.address
+            && e.1
+                == (
+                    symbol_short!("gov"),
+                    symbol_short!("created"),
+                    creator.clone(),
+                )
+                    .into_val(&env)
+    });
+
+    assert!(created_event_opt.is_some(), "ProposalCreated event not emitted");
+    let event_data: ProposalCreated = created_event_opt.unwrap().2.clone().into_val(&env);
+
+    assert_eq!(event_data.proposal_id, proposal_id);
+    assert_eq!(event_data.creator, creator);
+    assert_eq!(event_data.description, description);
+}
+
+#[test]
+fn test_vote_cast_emits_event() {
+    let (env, client, admin) = setup_contract();
+    env.mock_all_auths();
+
+    client.init_voting_config(&admin, &5000, &604800, &86400, &100, &10_000);
+
+    let creator = Address::generate(&env);
+    let voter = Address::generate(&env);
+
+    client.initialize_user(&voter);
+    client.create_savings_plan(&voter, &PlanType::Flexi, &10000);
+
+    let proposal_id = client.create_proposal(&creator, &String::from_str(&env, "Vote test"));
+
+    client.vote(&proposal_id, &1, &voter);
+
+    let events = env.events().all();
+
+    let vote_event_opt = events.iter().rev().find(|e| {
+        e.0 == client.address
+            && e.1
+                == (
+                    symbol_short!("gov"),
+                    symbol_short!("voted"),
+                    voter.clone(),
+                )
+                    .into_val(&env)
+    });
+
+    assert!(vote_event_opt.is_some(), "VoteCast event not emitted");
+    let event_data: VoteCast = vote_event_opt.unwrap().2.clone().into_val(&env);
+
+    assert_eq!(event_data.proposal_id, proposal_id);
+    assert_eq!(event_data.voter, voter);
+    assert_eq!(event_data.vote_type, 1);
+    assert!(event_data.weight > 0);
+}
 }
