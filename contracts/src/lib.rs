@@ -132,6 +132,20 @@ mod fee_tests {
 
 #[contractimpl]
 impl NesteraContract {
+    /// Returns all proposal IDs the user has voted on
+    pub fn get_user_voted_proposals(env: Env, user: Address) -> Vec<u64> {
+        governance::get_user_voted_proposals(&env, user)
+    }
+
+    /// Returns all active (non-executed, within voting period) proposal IDs
+    pub fn get_active_proposals(env: Env) -> Vec<u64> {
+        governance::get_active_proposals(&env)
+    }
+
+    /// Returns vote counts for a proposal
+    pub fn get_proposal_votes(env: Env, proposal_id: u64) -> (u128, u128, u128) {
+        governance::get_proposal_votes(&env, proposal_id)
+    }
     /// Initialize a new user in the system
     pub fn init_user(env: Env, user: Address) -> User {
         ensure_not_paused(&env).unwrap_or_else(|e| panic_with_error!(&env, e));

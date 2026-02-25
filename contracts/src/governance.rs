@@ -1,3 +1,39 @@
+/// Returns all proposal IDs the user has voted on
+pub fn get_user_voted_proposals(env: &Env, user: Address) -> Vec<u64> {
+    let mut voted: Vec<u64> = Vec::new(env);
+    let all = list_proposals(env);
+    for pid in all.iter() {
+        let key = GovernanceKey::VoterRecord(pid.clone(), user.clone());
+        if env.storage().persistent().has(&key) {
+            voted.push_back(pid.clone());
+        }
+    }
+    voted
+}
+
+/// Returns all active (non-executed, within voting period) proposal IDs
+pub fn get_active_proposals(env: &Env) -> Vec<u64> {
+    let now = env.ledger().timestamp();
+    let mut active: Vec<u64> = Vec::new(env);
+    let all = list_proposals(env);
+    for pid in all.iter() {
+        if let Some(p) = get_proposal(env, pid.clone()) {
+            if !p.executed && now >= p.start_time && now <= p.end_time {
+                active.push_back(pid.clone());
+            }
+        }
+    }
+    active
+}
+
+/// Returns vote counts for a proposal
+pub fn get_proposal_votes(env: &Env, proposal_id: u64) -> (u128, u128, u128) {
+    if let Some(p) = get_proposal(env, proposal_id) {
+        (p.for_votes, p.against_votes, p.abstain_votes)
+    } else {
+        (0, 0, 0)
+    }
+}
 use crate::errors::SavingsError;
 use crate::governance_events::*;
 use crate::rewards::storage::get_user_rewards;

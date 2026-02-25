@@ -121,7 +121,7 @@ pub fn withdraw_from_strategy(
     position_key: StrategyPositionKey,
     to: Address,
 ) -> Result<i128, SavingsError> {
-    let position: StrategyPosition = env
+    let mut position: StrategyPosition = env
         .storage()
         .persistent()
         .get(&position_key)
@@ -137,21 +137,28 @@ pub fn withdraw_from_strategy(
         return Err(SavingsError::StrategyNotFound);
     }
 
-    // Update state BEFORE external call
-    let cleared = StrategyPosition {
-        strategy: position.strategy.clone(),
-        principal_deposited: 0,
-        strategy_shares: 0,
-    };
-    env.storage().persistent().set(&position_key, &cleared);
-
-    // External call
+    // External call: check actual balance
     let client = YieldStrategyClient::new(env, &position.strategy);
-    let returned = client.strategy_withdraw(&to, &position.principal_deposited);
+    let strategy_balance = client.strategy_balance(&env.current_contract_address());
+    let withdraw_amount = position.principal_deposited.min(strategy_balance);
+    if withdraw_amount <= 0 {
+        return Err(SavingsError::InsufficientBalance);
+    }
+
+    // Update state BEFORE external call
+    position.principal_deposited = position
+        .principal_deposited
+        .checked_sub(withdraw_amount)
+        .ok_or(SavingsError::Underflow)?;
+    position.strategy_shares = 0;
+    env.storage().persistent().set(&position_key, &position);
+
+    // Call strategy withdraw
+    let returned = client.strategy_withdraw(&to, &withdraw_amount);
 
     env.events().publish(
         (symbol_short!("strat"), symbol_short!("withdraw")),
-        (position.strategy, returned),
+        (position.strategy, withdraw_amount, returned),
     );
 
     Ok(returned)

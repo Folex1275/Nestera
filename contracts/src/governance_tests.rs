@@ -1,5 +1,64 @@
 #[cfg(test)]
 mod governance_tests {
+        use soroban_sdk::testutils::Ledger;
+    #[test]
+    fn test_full_governance_lifecycle() {
+        let (env, client, admin) = setup_contract();
+        env.mock_all_auths();
+        client.init_voting_config(&admin, &5000, &10, &5, &100, &10_000);
+
+        let creator = Address::generate(&env);
+        let voter1 = Address::generate(&env);
+        let voter2 = Address::generate(&env);
+        client.initialize_user(&voter1);
+        client.initialize_user(&voter2);
+        client.create_savings_plan(&voter1, &PlanType::Flexi, &10000);
+        client.create_savings_plan(&voter2, &PlanType::Flexi, &20000);
+
+        let desc = String::from_str(&env, "Lifecycle proposal");
+        let proposal_id = client.create_proposal(&creator, &desc);
+
+            client.vote(&proposal_id, &1, &voter1); // For
+            client.vote(&proposal_id, &1, &voter2); // For
+
+        // Advance ledger time to after voting period
+        env.ledger().with_mut(|li| li.timestamp += 11);
+        client.queue_proposal(&proposal_id);
+        env.ledger().with_mut(|li| li.timestamp += 6);
+        client.execute_proposal(&proposal_id);
+        let proposal = client.get_proposal(&proposal_id).unwrap();
+        assert!(proposal.executed);
+    }
+
+    #[test]
+    fn test_governance_attack_scenarios() {
+        let (env, client, admin) = setup_contract();
+        env.mock_all_auths();
+        client.init_voting_config(&admin, &5000, &10, &5, &100, &10_000);
+
+        let creator = Address::generate(&env);
+        let attacker = Address::generate(&env);
+        client.initialize_user(&attacker);
+        client.create_savings_plan(&attacker, &PlanType::Flexi, &50); // Not enough power
+
+        let desc = String::from_str(&env, "Attack proposal");
+        let proposal_id = client.create_proposal(&creator, &desc);
+
+        // Attacker tries to vote multiple times
+        client.vote(&proposal_id, &1, &attacker);
+        let result = client.try_vote(&proposal_id, &1, &attacker);
+        assert!(result.is_err()); // No double voting
+
+        // Attacker tries to queue before voting period ends
+        let early_queue = client.try_queue_proposal(&proposal_id);
+        assert!(early_queue.is_err());
+
+        // Attacker tries to execute before timelock
+        env.ledger().with_mut(|li| li.timestamp += 11);
+        client.queue_proposal(&proposal_id);
+        let early_exec = client.try_execute_proposal(&proposal_id);
+        assert!(early_exec.is_err());
+    }
 
     use crate::governance_events::{ProposalCreated, VoteCast};
     use crate::rewards::storage_types::RewardsConfig;
