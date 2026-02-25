@@ -12,6 +12,7 @@ import { AuthModule } from './auth/auth.module';
 import { HealthModule } from './modules/health/health.module';
 import { BlockchainModule } from './modules/blockchain/blockchain.module';
 import { UserModule } from './modules/user/user.module';
+import { AdminModule } from './modules/admin/admin.module';
 import { MailModule } from './modules/mail/mail.module';
 import { RedisCacheModule } from './modules/cache/cache.module';
 import { WebhooksModule } from './modules/webhooks/webhooks.module';
@@ -41,6 +42,7 @@ import { WebhooksModule } from './modules/webhooks/webhooks.module';
     HealthModule,
     BlockchainModule,
     UserModule,
+    AdminModule,
     MailModule,
     WebhooksModule,
     ThrottlerModule.forRoot([

@@ -29,6 +29,15 @@ export class User {
   @Column({ nullable: true })
   avatarUrl: string;
 
+  @Column({ type: 'varchar', default: 'NOT_SUBMITTED' })
+  kycStatus: 'NOT_SUBMITTED' | 'PENDING' | 'APPROVED' | 'REJECTED';
+
+  @Column({ nullable: true })
+  kycDocumentUrl: string;
+
+  @Column({ type: 'text', nullable: true })
+  kycRejectionReason: string;
+
   @CreateDateColumn()
   createdAt: Date;
 

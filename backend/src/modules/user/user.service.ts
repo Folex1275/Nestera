@@ -14,7 +14,7 @@ export class UserService {
   async findById(id: string) {
     const user = await this.userRepository.findOne({
       where: { id },
-      select: ['id', 'email', 'name', 'bio', 'createdAt', 'updatedAt'],
+      select: ['id', 'email', 'name', 'bio', 'kycStatus', 'kycDocumentUrl', 'createdAt', 'updatedAt'],
     });
 
     if (!user) {
@@ -58,6 +58,40 @@ export class UserService {
     await this.findById(userId);
 
     await this.userRepository.update(userId, { avatarUrl });
+
+    return this.findById(userId);
+  }
+
+  async updateKycDocument(userId: string, kycDocumentUrl: string) {
+    await this.findById(userId);
+
+    await this.userRepository.update(userId, {
+      kycDocumentUrl,
+      kycStatus: 'PENDING',
+    });
+
+    return this.findById(userId);
+  }
+
+  async approveKyc(userId: string) {
+    await this.findById(userId);
+
+    const updateData: any = {
+      kycStatus: 'APPROVED',
+    };
+    
+    await this.userRepository.update(userId, updateData);
+
+    return this.findById(userId);
+  }
+
+  async rejectKyc(userId: string, reason: string) {
+    await this.findById(userId);
+
+    await this.userRepository.update(userId, {
+      kycStatus: 'REJECTED',
+      kycRejectionReason: reason,
+    });
 
     return this.findById(userId);
   }

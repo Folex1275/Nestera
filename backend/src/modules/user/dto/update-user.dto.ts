@@ -11,3 +11,16 @@ export class UpdateUserDto {
   @MaxLength(500)
   bio?: string;
 }
+
+export class ApproveKycDto {
+  @IsString()
+  userId: string;
+}
+
+export class RejectKycDto {
+  @IsString()
+  userId: string;
+
+  @IsString()
+  reason: string;
+}

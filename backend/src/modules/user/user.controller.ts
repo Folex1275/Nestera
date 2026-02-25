@@ -40,6 +40,21 @@ class ImageTypeValidator extends FileValidator {
   }
 }
 
+class KycDocumentValidator extends FileValidator {
+  constructor() {
+    super({});
+  }
+
+  isValid(file: Express.Multer.File): boolean {
+    const allowedTypes = ['application/pdf', 'image/jpeg'];
+    return allowedTypes.includes(file.mimetype);
+  }
+
+  buildErrorMessage(): string {
+    return 'Invalid file type. Only PDF and JPEG formats are allowed for KYC documents.';
+  }
+}
+
 @Controller('users')
 @UseGuards(JwtAuthGuard)
 export class UserController {
@@ -128,6 +143,24 @@ export class UserController {
   ) {
     const avatarUrl = await this.storageService.saveFile(file);
     return this.userService.updateAvatar(user.id, avatarUrl);
+  }
+
+  @Post('me/kyc-docs')
+  @UseInterceptors(FileInterceptor('document'))
+  async uploadKycDocument(
+    @CurrentUser() user: { id: string },
+    @UploadedFile(
+      new ParseFilePipe({
+        validators: [
+          new MaxFileSizeValidator({ maxSize: 1024 * 1024 * 10 }), // 10MB
+          new KycDocumentValidator(),
+        ],
+      }),
+    )
+    file: Express.Multer.File,
+  ) {
+    const kycDocumentUrl = await this.storageService.saveFile(file);
+    return this.userService.updateKycDocument(user.id, kycDocumentUrl);
   }
 
   private createZeroNetWorthResponse(): NetWorthDto {
