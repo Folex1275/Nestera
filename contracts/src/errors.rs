@@ -225,15 +225,9 @@ pub enum SavingsError {
 
     /// Returned when the specified lock plan does not exist.
     LockNotFound = 95,
-    // ========== Strategy Errors (92-99) ==========
-    /// Returned when a yield strategy is not found in the registry.
-    StrategyNotFound = 92,
 
     /// Returned when attempting to register a strategy that already exists.
-    StrategyAlreadyRegistered = 93,
-
-    /// Returned when attempting to deposit into a disabled strategy.
-    StrategyDisabled = 94,
+    StrategyAlreadyRegistered = 96,
 }
 
 #[cfg(test)]
