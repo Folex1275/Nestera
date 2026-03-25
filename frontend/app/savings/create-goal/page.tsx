@@ -1,10 +1,11 @@
-'use client';
+"use client";
 
-import React from 'react';
-import Link from 'next/link';
-import { ArrowLeft } from 'lucide-react';
-import GoalCTASection from './components/GoalCTASection';
-import CreateGoalForm from './components/CreateGoalForm';
+import React from "react";
+import Link from "next/link";
+import { ArrowLeft } from "lucide-react";
+import GoalCTASection from "./components/GoalCTASection";
+import CreateGoalForm from "./components/CreateGoalForm";
+import YieldBoostCard from "./components/YieldBoostCard";
 
 export default function CreateGoalPage() {
   return (
@@ -28,6 +29,7 @@ export default function CreateGoalPage() {
       </div>
 
       <GoalCTASection />
+      <YieldBoostCard />
       <CreateGoalForm />
     </section>
   );

@@ -1,7 +1,7 @@
 "use client";
 
 import React from "react";
-import { Download, History } from "lucide-react";
+import { Download, History, Search, ChevronDown } from "lucide-react";
 
 type TransactionRow = {
   date: string;
@@ -28,7 +28,11 @@ function toCsv(rows: TransactionRow[]) {
   return `${lines.join("\n")}\n`;
 }
 
-function downloadTextFile(filename: string, text: string, mime = "text/csv;charset=utf-8") {
+function downloadTextFile(
+  filename: string,
+  text: string,
+  mime = "text/csv;charset=utf-8",
+) {
   const blob = new Blob([text], { type: mime });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
@@ -74,7 +78,10 @@ export default function TransactionHistoryPage() {
 
   function onExportCsv() {
     const csv = toCsv(transactions);
-    downloadTextFile(`nestera-transactions-${new Date().toISOString().slice(0, 10)}.csv`, csv);
+    downloadTextFile(
+      `nestera-transactions-${new Date().toISOString().slice(0, 10)}.csv`,
+      csv,
+    );
   }
 
   return (
@@ -85,7 +92,9 @@ export default function TransactionHistoryPage() {
             <History size={24} />
           </div>
           <div>
-            <h1 className="text-3xl font-bold text-white m-0 tracking-tight">Transaction History</h1>
+            <h1 className="text-3xl font-bold text-white m-0 tracking-tight">
+              Transaction History
+            </h1>
             <p className="text-[#5e8c96] text-sm md:text-base m-0 mt-1">
               Download your transactions as a CSV file for reporting.
             </p>
@@ -99,6 +108,31 @@ export default function TransactionHistoryPage() {
           <Download size={18} />
           Export CSV
         </button>
+      </div>
+
+      <div className="flex flex-wrap items-center gap-4 mb-6">
+        <div className="relative flex-1 min-w-[280px]">
+          <Search
+            className="absolute left-4 top-1/2 -translate-y-1/2 text-[#5e8c96]"
+            size={18}
+          />
+          <input
+            type="text"
+            placeholder="Search by transaction, token, or hash..."
+            className="w-full bg-[#0e2330] border border-white/5 rounded-xl py-3 pl-12 pr-4 text-white placeholder:text-[#4e7a86] focus:outline-hidden focus:border-cyan-500/50 transition-colors"
+          />
+        </div>
+
+        {["Type: All", "Asset: All", "Status: All"].map((filter) => (
+          <button
+            type="button"
+            key={filter}
+            className="flex items-center gap-2 px-4 py-3 rounded-xl border bg-[#0e2330] border-white/5 text-[#5e8c96] hover:border-white/10 hover:text-white transition-all"
+          >
+            <span className="text-sm font-medium">{filter}</span>
+            <ChevronDown size={14} opacity={0.7} />
+          </button>
+        ))}
       </div>
 
       <div className="rounded-2xl border border-white/5 bg-[#0e2330] overflow-hidden">
@@ -116,7 +150,9 @@ export default function TransactionHistoryPage() {
           >
             <div className="col-span-4 text-[#dff]">{t.date}</div>
             <div className="col-span-4 text-[#dff]">{t.title}</div>
-            <div className="col-span-2 text-[#7fbfbf] font-semibold">{t.token}</div>
+            <div className="col-span-2 text-[#7fbfbf] font-semibold">
+              {t.token}
+            </div>
             <div className="col-span-2 text-right font-bold">{t.amount}</div>
           </div>
         ))}
@@ -124,4 +160,3 @@ export default function TransactionHistoryPage() {
     </div>
   );
 }
-
