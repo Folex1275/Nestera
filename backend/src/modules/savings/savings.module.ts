@@ -21,4 +21,4 @@ import { User } from '../user/entities/user.entity';
   providers: [SavingsService, PredictiveEvaluatorService],
   exports: [SavingsService],
 })
-export class SavingsModule { }
+export class SavingsModule {}

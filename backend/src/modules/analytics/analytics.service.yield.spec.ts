@@ -3,7 +3,10 @@ import { getRepositoryToken } from '@nestjs/typeorm';
 import { AnalyticsService } from './analytics.service';
 import { User } from '../user/entities/user.entity';
 import { ProcessedStellarEvent } from '../blockchain/entities/processed-event.entity';
-import { LedgerTransaction, LedgerTransactionType } from '../blockchain/entities/transaction.entity';
+import {
+  LedgerTransaction,
+  LedgerTransactionType,
+} from '../blockchain/entities/transaction.entity';
 import { SavingsService as BlockchainSavingsService } from '../blockchain/savings.service';
 import { StellarService } from '../blockchain/stellar.service';
 import { OracleService } from '../blockchain/oracle.service';
@@ -42,7 +45,7 @@ describe('AnalyticsService - Yield Breakdown', () => {
         },
         {
           provide: OracleService,
-          useValue: { 
+          useValue: {
             convertXLMToUsd: jest.fn(),
             convertToUsd: jest.fn(),
             convertAQUAToUsd: jest.fn(),
@@ -56,7 +59,7 @@ describe('AnalyticsService - Yield Breakdown', () => {
 
   it('should return yield breakdown grouped by pool', async () => {
     const userId = 'user-1';
-    
+
     transactionRepository.find.mockResolvedValue([
       {
         id: '1',
@@ -88,7 +91,7 @@ describe('AnalyticsService - Yield Breakdown', () => {
 
     expect(result).toEqual({
       pools: [
-        { pool: 'XLM Staking', earned: 495.50 },
+        { pool: 'XLM Staking', earned: 495.5 },
         { pool: 'AQUA Farming', earned: 150.25 },
       ],
       totalInterestEarned: 645.75,
@@ -97,7 +100,7 @@ describe('AnalyticsService - Yield Breakdown', () => {
 
   it('should return empty result for user with no yield transactions', async () => {
     const userId = 'user-2';
-    
+
     transactionRepository.find.mockResolvedValue([]);
 
     const result = await service.getYieldBreakdown(userId);
