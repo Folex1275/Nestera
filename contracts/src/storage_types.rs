@@ -149,6 +149,10 @@ pub enum DataKey {
     ConfigInitialized,
     /// Treasury allocation config (reserve/rewards/operations percentages)
     AllocationConfig,
+    /// Treasury security limits for admin withdrawals
+    TreasurySecurityConfig,
+    /// Daily treasury withdrawal tracker (timestamp + amount)
+    TreasuryDailyWithdrawal,
     /// Early break fee (basis points) for goal saves
     EarlyBreakFeeBps,
     /// Fee recipient for protocol/treasury fees

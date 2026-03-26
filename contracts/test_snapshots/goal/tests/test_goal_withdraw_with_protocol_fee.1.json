@@ -73,8 +73,17 @@
           "function": {
             "contract_fn": {
               "contract_address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD2KM",
-              "function_name": "set_protocol_fee_bps",
+              "function_name": "set_fees",
               "args": [
+                {
+                  "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAFCT4"
+                },
+                {
+                  "u32": 250
+                },
+                {
+                  "u32": 250
+                },
                 {
                   "u32": 250
                 }
@@ -397,6 +406,94 @@
             "key": {
               "vec": [
                 {
+                  "symbol": "Treasury"
+                }
+              ]
+            },
+            "durability": "persistent"
+          }
+        },
+        [
+          {
+            "last_modified_ledger_seq": 0,
+            "data": {
+              "contract_data": {
+                "ext": "v0",
+                "contract": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD2KM",
+                "key": {
+                  "vec": [
+                    {
+                      "symbol": "Treasury"
+                    }
+                  ]
+                },
+                "durability": "persistent",
+                "val": {
+                  "map": [
+                    {
+                      "key": {
+                        "symbol": "operations_balance"
+                      },
+                      "val": {
+                        "i128": "0"
+                      }
+                    },
+                    {
+                      "key": {
+                        "symbol": "reserve_balance"
+                      },
+                      "val": {
+                        "i128": "0"
+                      }
+                    },
+                    {
+                      "key": {
+                        "symbol": "rewards_balance"
+                      },
+                      "val": {
+                        "i128": "0"
+                      }
+                    },
+                    {
+                      "key": {
+                        "symbol": "total_fees_collected"
+                      },
+                      "val": {
+                        "i128": "246"
+                      }
+                    },
+                    {
+                      "key": {
+                        "symbol": "total_yield_earned"
+                      },
+                      "val": {
+                        "i128": "0"
+                      }
+                    },
+                    {
+                      "key": {
+                        "symbol": "treasury_balance"
+                      },
+                      "val": {
+                        "i128": "246"
+                      }
+                    }
+                  ]
+                }
+              }
+            },
+            "ext": "v0"
+          },
+          4095
+        ]
+      ],
+      [
+        {
+          "contract_data": {
+            "contract": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD2KM",
+            "key": {
+              "vec": [
+                {
                   "symbol": "User"
                 },
                 {
@@ -646,6 +743,18 @@
                         "key": {
                           "vec": [
                             {
+                              "symbol": "DepositFeeBps"
+                            }
+                          ]
+                        },
+                        "val": {
+                          "u32": 250
+                        }
+                      },
+                      {
+                        "key": {
+                          "vec": [
+                            {
                               "symbol": "FeeRecipient"
                             }
                           ]
@@ -670,7 +779,7 @@
                         "key": {
                           "vec": [
                             {
-                              "symbol": "PlatformFee"
+                              "symbol": "PerformanceFeeBps"
                             }
                           ]
                         },
@@ -688,6 +797,18 @@
                         },
                         "val": {
                           "bool": false
+                        }
+                      },
+                      {
+                        "key": {
+                          "vec": [
+                            {
+                              "symbol": "WithdrawalFeeBps"
+                            }
+                          ]
+                        },
+                        "val": {
+                          "u32": 250
                         }
                       }
                     ]

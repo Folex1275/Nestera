@@ -73,8 +73,17 @@
           "function": {
             "contract_fn": {
               "contract_address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD2KM",
-              "function_name": "set_protocol_fee_bps",
+              "function_name": "set_fees",
               "args": [
+                {
+                  "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAFCT4"
+                },
+                {
+                  "u32": 100
+                },
+                {
+                  "u32": 100
+                },
                 {
                   "u32": 100
                 }
@@ -578,6 +587,18 @@
                         "key": {
                           "vec": [
                             {
+                              "symbol": "DepositFeeBps"
+                            }
+                          ]
+                        },
+                        "val": {
+                          "u32": 100
+                        }
+                      },
+                      {
+                        "key": {
+                          "vec": [
+                            {
                               "symbol": "FeeRecipient"
                             }
                           ]
@@ -602,7 +623,7 @@
                         "key": {
                           "vec": [
                             {
-                              "symbol": "PlatformFee"
+                              "symbol": "PerformanceFeeBps"
                             }
                           ]
                         },
@@ -620,6 +641,18 @@
                         },
                         "val": {
                           "bool": false
+                        }
+                      },
+                      {
+                        "key": {
+                          "vec": [
+                            {
+                              "symbol": "WithdrawalFeeBps"
+                            }
+                          ]
+                        },
+                        "val": {
+                          "u32": 100
                         }
                       }
                     ]

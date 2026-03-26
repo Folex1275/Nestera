@@ -1017,6 +1017,31 @@ impl NesteraContract {
         treasury::get_reserve_balance(&env)
     }
 
+    /// Returns treasury withdrawal security limits.
+    pub fn get_treasury_limits(env: Env) -> treasury::types::TreasurySecurityConfig {
+        treasury::get_treasury_limits(&env)
+    }
+
+    /// Updates treasury withdrawal limits (admin only).
+    pub fn set_treasury_limits(
+        env: Env,
+        admin: Address,
+        max_withdrawal_per_tx: i128,
+        daily_withdrawal_cap: i128,
+    ) -> Result<treasury::types::TreasurySecurityConfig, SavingsError> {
+        treasury::set_treasury_limits(&env, &admin, max_withdrawal_per_tx, daily_withdrawal_cap)
+    }
+
+    /// Withdraws from a treasury pool with per-tx and daily caps (admin only).
+    pub fn withdraw_treasury(
+        env: Env,
+        admin: Address,
+        pool: treasury::types::TreasuryPool,
+        amount: i128,
+    ) -> Result<treasury::types::Treasury, SavingsError> {
+        treasury::withdraw_treasury(&env, &admin, pool, amount)
+    }
+
     /// Allocates the unallocated treasury balance into reserves, rewards, and operations.
     /// Percentages are in basis points and must sum to 10_000.
     pub fn allocate_treasury(
