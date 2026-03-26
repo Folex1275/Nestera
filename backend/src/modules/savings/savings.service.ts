@@ -288,12 +288,24 @@ export class SavingsService {
     targetDate: Date,
     metadata?: any,
   ): Promise<SavingsGoal> {
+    // Additional server-side validation for future date
+    const now = new Date();
+    now.setHours(0, 0, 0, 0);
+
+    const target = new Date(targetDate);
+    target.setHours(0, 0, 0, 0);
+
+    if (target <= now) {
+      throw new BadRequestException('Target date must be in the future');
+    }
+
     const goal = this.goalRepository.create({
       userId,
       goalName,
       targetAmount,
       targetDate,
       metadata: metadata || null,
+      status: SavingsGoalStatus.IN_PROGRESS,
     });
 
     return await this.goalRepository.save(goal);
