@@ -56,6 +56,15 @@ export class User {
   @Column({ nullable: true })
   nonce: string;
 
+  @Column({ type: 'boolean', default: false })
+  twoFactorEnabled: boolean;
+
+  @Column({ type: 'varchar', nullable: true })
+  twoFactorSecret: string | null;
+
+  @Column({ type: 'simple-array', nullable: true })
+  twoFactorBackupCodes: string[] | null;
+
   @CreateDateColumn()
   createdAt: Date;
 

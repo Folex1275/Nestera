@@ -50,6 +50,16 @@ export class AuthService {
       throw new UnauthorizedException('Invalid credentials');
     }
 
+    // Check if 2FA is enabled
+    const fullUser = await this.userService.findByEmail(dto.email);
+    if (fullUser?.twoFactorEnabled) {
+      return {
+        requiresTwoFactor: true,
+        userId: user.id,
+        message: 'Please provide your 2FA token',
+      };
+    }
+
     return {
       accessToken: this.generateToken(user.id, user.email, user.role),
     };

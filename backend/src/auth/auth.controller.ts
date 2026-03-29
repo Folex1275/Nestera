@@ -8,6 +8,7 @@ import {
   Query,
   UseGuards,
   Request,
+  UnauthorizedException,
 } from '@nestjs/common';
 import {
   ApiBearerAuth,
@@ -17,6 +18,7 @@ import {
 } from '@nestjs/swagger';
 import { Throttle } from '@nestjs/throttler';
 import { AuthService } from './auth.service';
+import { TwoFactorService } from './two-factor.service';
 import {
   RegisterDto,
   LoginDto,
@@ -24,12 +26,20 @@ import {
   VerifySignatureDto,
   LinkWalletDto,
 } from './dto/auth.dto';
+import {
+  VerifyTwoFactorDto,
+  LoginWithTwoFactorDto,
+  AdminDisableTwoFactorDto,
+} from './dto/two-factor.dto';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 
 @ApiTags('auth')
 @Controller('auth')
 export class AuthController {
-  constructor(private readonly authService: AuthService) {}
+  constructor(
+    private readonly authService: AuthService,
+    private readonly twoFactorService: TwoFactorService,
+  ) {}
 
   @Post('register')
   @Throttle({ auth: { limit: 5, ttl: 15 * 60 * 1000 } })
@@ -98,5 +108,101 @@ export class AuthController {
     @Body() dto: LinkWalletDto,
   ) {
     return this.authService.linkWallet(req.user.id, dto);
+  }
+
+  // --- Two-Factor Authentication Endpoints ---
+
+  @Post('2fa/enable')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: 'Enable 2FA - generates secret and backup codes',
+    description:
+      'Returns a TOTP secret, otpauth:// URL for QR code generation, and backup codes. ' +
+      'Call POST /auth/2fa/verify with a valid token to activate.',
+  })
+  @ApiResponse({ status: 201, description: 'Secret and backup codes generated' })
+  @ApiResponse({ status: 400, description: '2FA already enabled' })
+  enable2fa(@Request() req: { user: { id: string } }) {
+    return this.twoFactorService.enable(req.user.id);
+  }
+
+  @Post('2fa/verify')
+  @UseGuards(JwtAuthGuard)
+  @HttpCode(HttpStatus.OK)
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: 'Verify and activate 2FA with a TOTP token',
+    description:
+      'After enabling, submit a token from your authenticator app to confirm setup.',
+  })
+  @ApiResponse({ status: 200, description: '2FA activated' })
+  @ApiResponse({ status: 401, description: 'Invalid token' })
+  verify2fa(
+    @Request() req: { user: { id: string } },
+    @Body() dto: VerifyTwoFactorDto,
+  ) {
+    return this.twoFactorService.verify(req.user.id, dto.token);
+  }
+
+  @Post('2fa/validate')
+  @Throttle({ auth: { limit: 5, ttl: 15 * 60 * 1000 } })
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Complete login with 2FA token',
+    description:
+      'When login returns requiresTwoFactor: true, call this endpoint with the userId and TOTP token.',
+  })
+  @ApiResponse({ status: 200, description: 'JWT returned on success' })
+  @ApiResponse({ status: 401, description: 'Invalid 2FA token' })
+  async validate2fa(
+    @Body('userId') userId: string,
+    @Body() dto: LoginWithTwoFactorDto,
+  ) {
+    const valid = await this.twoFactorService.validateLogin(userId, dto.token);
+    if (!valid) {
+      throw new UnauthorizedException('Invalid 2FA token');
+    }
+    return this.twoFactorService.completeLogin(userId);
+  }
+
+  @Post('2fa/disable')
+  @UseGuards(JwtAuthGuard)
+  @HttpCode(HttpStatus.OK)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Disable 2FA for your account' })
+  @ApiResponse({ status: 200, description: '2FA disabled' })
+  @ApiResponse({ status: 400, description: '2FA not enabled' })
+  disable2fa(@Request() req: { user: { id: string } }) {
+    return this.twoFactorService.disable(req.user.id);
+  }
+
+  @Post('2fa/admin-disable')
+  @UseGuards(JwtAuthGuard)
+  @HttpCode(HttpStatus.OK)
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: 'Admin: disable 2FA for a locked account',
+    description: 'Requires ADMIN role',
+  })
+  @ApiResponse({ status: 200, description: '2FA disabled for target user' })
+  @ApiResponse({ status: 400, description: '2FA not enabled for user' })
+  adminDisable2fa(
+    @Request() req: { user: { id: string; role: string } },
+    @Body() dto: AdminDisableTwoFactorDto,
+  ) {
+    if (req.user.role !== 'ADMIN') {
+      throw new UnauthorizedException('Admin access required');
+    }
+    return this.twoFactorService.adminDisable(dto.userId);
+  }
+
+  @Get('2fa/status')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Check if 2FA is enabled for your account' })
+  @ApiResponse({ status: 200, description: '2FA status' })
+  get2faStatus(@Request() req: { user: { id: string } }) {
+    return this.twoFactorService.getStatus(req.user.id);
   }
 }
