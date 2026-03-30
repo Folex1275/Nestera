@@ -1,12 +1,16 @@
 import { Controller, Get, Param, Post } from '@nestjs/common';
 import { ApiOperation, ApiParam, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { StellarService } from './stellar.service';
+import { BalanceSyncService } from './balance-sync.service';
 import { TransactionDto } from './dto/transaction.dto';
 
 @ApiTags('Blockchain')
 @Controller('blockchain')
 export class BlockchainController {
-  constructor(private readonly stellarService: StellarService) {}
+  constructor(
+    private readonly stellarService: StellarService,
+    private readonly balanceSyncService: BalanceSyncService,
+  ) {}
 
   @Post('wallets/generate')
   @ApiOperation({ summary: 'Generate a new Stellar keypair' })
@@ -42,9 +46,17 @@ export class BlockchainController {
   })
   @ApiResponse({
     status: 200,
-    description: 'Status of all RPC endpoints including current active endpoint',
+    description:
+      'Status of all RPC endpoints including current active endpoint',
   })
   getRpcStatus() {
     return this.stellarService.getEndpointsStatus();
+  }
+
+  @Get('balance-sync/metrics')
+  @ApiOperation({ summary: 'Get WebSocket connection health metrics for balance sync' })
+  @ApiResponse({ status: 200, description: 'Connection metrics summary for all subscribed accounts' })
+  getBalanceSyncMetrics() {
+    return this.balanceSyncService.getMetricsSummary();
   }
 }

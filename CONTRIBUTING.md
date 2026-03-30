@@ -1,102 +1,193 @@
-# Nestera Contributing Guide
+# Contributing to Amana
 
-Welcome! Thank you for your interest in contributing to Nestera. We appreciate all contributions, from code fixes to documentation improvements.
+Thank you for your interest in contributing to Amana! This document outlines our contribution guidelines, code ownership policy, and review requirements.
 
-Follow this guide to ensure your contributions are effective and aligned with project standards.
+## Code Ownership & Review Requirements
 
-## 🚀 Getting Started
+We maintain a CODEOWNERS file (`.github/CODEOWNERS`) that defines ownership of critical paths in the codebase. This ensures domain expertise is applied to high-impact changes.
 
-1. **Read the [README.md](README.md)** for setup (Rust, Soroban CLI, Node.js, contracts/backend/frontend).
-2. **Fork the repository** and clone your fork.
-3. **Install dependencies** and run `cargo check` / `npm install` as per README.
-4. **Create a feature branch** (see Git Workflow).
+### Critical Paths Requiring Review
 
-## 📏 Coding Standards
+The following areas require approval from designated code owners before merging:
 
-### Rust / Soroban Contracts (`contracts/`)
-- **Formatting:** `cargo fmt` (always run before commit).
-- **Linting:** `cargo clippy -- -D warnings`.
-- **Style:**
-  - Use `no_std`, Soroban SDK patterns.
-  - `Check-effects-interact`: Validate first, mutate storage, emit events.
-  - Math: `checked_add/sub/mul` for i128 to prevent overflow.
-  - Invariants: Use `invariants::assert_non_negative`, fee bounds.
-  - Storage: Extend TTL after writes (see [SOROBAN_STORAGE.md](contracts/docs/SOROBAN_STORAGE.md)).
-  - Errors: `SavingsError` enum, `panic_with_error!`.
-- **Testing:** `cargo test` – unit/integration, cover edge cases (TTL, fees, maturity).
-- **Build:** `cargo build --target wasm32-unknown-unknown --release`.
+#### Smart Contracts
+- **Path**: `contracts/amana_escrow/**`
+- **Reason**: Core escrow logic affecting fund security and dispute resolution
+- **Owner**: @KingFRANKHOOD
 
-### TypeScript / NestJS (`backend/`) & Next.js (`frontend/`)
-- **Formatting:** ESLint + Prettier (configs provided).
-- **Linting:** `eslint . --fix`, `prettier --write .`.
-- **Standards:** Async/await, type-safe (DTOs, guards), filters (HTTP exceptions).
+#### Backend: Authentication & Authorization
+- **Path**: `backend/src/auth/**`, `backend/src/common/guards/**`
+- **Reason**: Security-critical authentication and access control
+- **Owner**: @KingFRANKHOOD
 
-### General
-- **Conventional Commits:** `feat: add group save`, `fix: ttl overflow`, `docs: update guide`, `chore: fmt`.
-- **Tests:** 100% coverage for new features/fixes.
+#### Backend: Blockchain Integration
+- **Path**: `backend/src/modules/blockchain/**`, `backend/src/modules/transactions/**`
+- **Reason**: Contract interaction and transaction integrity
+- **Owner**: @KingFRANKHOOD
 
-## 🗂️ Naming Conventions
+#### Backend: Trade & Dispute Critical Paths
+- **Path**: `backend/src/modules/claims/**`, `backend/src/modules/disputes/**`
+- **Reason**: Core business logic for trade lifecycle and dispute resolution
+- **Owner**: @KingFRANKHOOD
 
-| Language | Variables/Params | Functions/Methods | Structs/Types | Constants |
-|----------|------------------|-------------------|---------------|-----------|
-| **Rust** | `snake_case` | `snake_case` | `PascalCase` | `SCREAMING_SNAKE_CASE` |
-| **TS** | `camelCase` | `camelCase` | `PascalCase` | `UPPER_SNAKE_CASE` |
-| **Symbols** (Soroban) | Short: `user`, `dep`, `rate` | - | - | - |
-| **Keys** (DataKey) | Descriptive enums: `UserGroupSaves(Address)` | - | - | - |
-| **Branches/PRs** | `feat/group-ui`, `fix/ttl-bug` | - | - | - |
+#### Backend: Observability & Audit
+- **Path**: `backend/src/common/interceptors/**`, `backend/src/common/filters/**`
+- **Reason**: Request tracing, audit logging, and incident debugging
+- **Owner**: @KingFRANKHOOD
 
-**Examples:**
-```rust
-// Good
-pub fn deposit_to_goal_save(env: Env, user: Address, goal_id: u64, amount: i128)
+#### Database Migrations
+- **Path**: `backend/src/migrations/**`
+- **Reason**: Schema changes affect all services and data integrity
+- **Owner**: @KingFRANKHOOD
 
-// Avoid
-pub fn Deposit(user, id, amt)  // Wrong case, short names
+#### Frontend: Dashboard & Contract Details
+- **Path**: `frontend/app/components/dashboard/**`
+- **Reason**: User-facing contract and trade information
+- **Owner**: @KingFRANKHOOD
+
+### How Code Ownership Works
+
+1. **Branch Protection**: PRs touching owned paths require approval from the designated code owner
+2. **Automatic Checks**: GitHub branch protection rules enforce this requirement
+3. **Exceptions**: Code owners can approve exceptions for urgent fixes or emergency patches
+
+## Contribution Workflow
+
+### 1. Create a Feature Branch
+
+```bash
+git checkout -b <type>/<issue-number>-<description>
 ```
 
-## 🔀 Git Workflow
+**Branch naming conventions**:
+- `feat/` - New features
+- `fix/` - Bug fixes
+- `hardening/` - Security or reliability improvements
+- `observability/` - Logging, monitoring, tracing
+- `governance/` - Policy, documentation, ownership
+- `refactor/` - Code improvements without behavior changes
 
-1. **Branch from `main`:** `git checkout -b feat/your-feature`.
-2. **Keep history clean:** Small, focused commits.
-3. **Rebase before PR:** `git rebase main`.
-4. **Push:** `git push origin feat/your-feature`.
+**Example**:
+```bash
+git checkout -b hardening/e2e-critical-path-tests
+git checkout -b observability/request-correlation-audit-logs
+git checkout -b governance/codeowners-required-review
+```
 
-**Branch Naming:** `feat/`, `fix/`, `docs/`, `refactor/`, `test/`, `chore/`.
+### 2. Make Your Changes
 
-## 🔄 Pull Request Process
+- Follow the existing code style and patterns
+- Write tests for new functionality
+- Update documentation as needed
+- Ensure all checks pass locally
 
-1. **Push branch** and open PR against `main`.
-2. **PR Template Requirements:**
-   ```
-   **Description:** What/why.
-   **Related Issue:** #123
-   **Changes:** - List
-   **Tests:** Added/updated
-   **Screenshots:** (UI)
-   ```
-3. **Checks:**
-   - [ ] `cargo fmt --check` / `prettier --check`.
-   - [ ] `cargo test` / `npm test` pass.
-   - [ ] No merge conflicts.
-   - [ ] CI green (if setup).
-4. **Review Process:**
-   - Assign reviewers (or `@maintainer`).
-   - Address feedback in new commits.
-   - Squash/rebase on approval.
-5. **Merge:** Squash & merge with conventional commit title.
+### 3. Commit Your Changes
 
-**Labels:** `status/ready`, `type/feat`, `area/contracts`.
+Use clear, descriptive commit messages:
 
-## 📚 Additional Resources
+```bash
+git commit -m "feat: add E2E tests for critical trade path"
+git commit -m "observability: add correlation ID and audit logging"
+git commit -m "governance: add CODEOWNERS and review policy"
+```
 
-- [Soroban Storage Design](contracts/docs/SOROBAN_STORAGE.md)
-- [Governance Docs](contracts/GOVERNANCE.md)
-- [Rust Soroban Docs](https://soroban.stellar.org/docs)
-- Issues: [Good first issue](https://github.com/issues?q=is:issue+is:open+label:"good+first+issue")
+### 4. Push and Create a PR
 
-## 🤝 Code of Conduct
+```bash
+git push origin <your-branch>
+```
 
-Follow the [Contributor Covenant](https://www.contributor-covenant.org/version/2/1/code_of_conduct/).
+Then create a PR on GitHub with:
+- Clear title describing the change
+- Description of what changed and why
+- Reference to related issues (e.g., `Closes #177`)
+- Screenshots or test results if applicable
 
-Happy contributing! 🎉
+### 5. Code Review
 
+- Address feedback from code owners
+- Ensure all CI checks pass
+- Request re-review after making changes
+
+## Testing Requirements
+
+### Unit Tests
+- Required for all new services and utilities
+- Run: `npm run test`
+
+### E2E Tests
+- Required for critical path changes (trade, dispute, auth)
+- Run: `npm run test:e2e`
+
+### Integration Tests
+- Required for blockchain and database interactions
+- Run: `npm run test:integration`
+
+## Commit Message Format
+
+We follow conventional commits for clear history:
+
+```
+<type>(<scope>): <subject>
+
+<body>
+
+<footer>
+```
+
+**Types**:
+- `feat`: New feature
+- `fix`: Bug fix
+- `docs`: Documentation
+- `style`: Code style (formatting, missing semicolons, etc.)
+- `refactor`: Code refactoring
+- `perf`: Performance improvement
+- `test`: Adding or updating tests
+- `chore`: Build, dependencies, tooling
+
+**Scopes**:
+- `auth`: Authentication module
+- `blockchain`: Blockchain integration
+- `claims`: Claims module
+- `disputes`: Disputes module
+- `observability`: Logging and tracing
+- `governance`: Code ownership and policy
+
+**Examples**:
+```
+feat(claims): add E2E tests for critical trade path
+observability(audit): add request correlation IDs and structured logs
+governance: add CODEOWNERS and required review rules
+```
+
+## Incident Tracing with Correlation IDs
+
+When debugging production issues, use correlation IDs to trace requests:
+
+```bash
+# Find all logs for a specific request
+grep "correlation-id-uuid" logs/*.log
+
+# Trace through database mutations
+SELECT * FROM audit_logs WHERE correlation_id = 'uuid' ORDER BY timestamp;
+
+# Check contract events
+grep "correlation-id-uuid" contract-events.log
+```
+
+See `OBSERVABILITY.md` for detailed runbook.
+
+## Security Considerations
+
+- Never commit secrets or private keys
+- Use environment variables for sensitive configuration
+- Follow OWASP guidelines for web security
+- Report security issues privately to maintainers
+
+## Questions?
+
+- Check existing issues and PRs
+- Review the README and documentation
+- Ask in discussions or contact maintainers
+
+Thank you for contributing to Amana!

@@ -1,0 +1,596 @@
+import { Injectable, Logger } from '@nestjs/common';
+import { OnEvent } from '@nestjs/event-emitter';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
+import { Notification, NotificationType } from './entities/notification.entity';
+import { NotificationPreference } from './entities/notification-preference.entity';
+import { MailService } from '../mail/mail.service';
+import { User } from '../user/entities/user.entity';
+import { WaitlistEntry } from '../savings/entities/waitlist-entry.entity';
+import { WaitlistEvent } from '../savings/entities/waitlist-event.entity';
+import { Role } from '../../common/enums/role.enum';
+
+export interface SweepCompletedEvent {
+  userId: string;
+  amount: string;
+  publicKey: string;
+  timestamp: Date;
+}
+
+export interface WithdrawalCompletedEvent {
+  userId: string;
+  withdrawalId: string;
+  amount: number;
+  penalty: number;
+  netAmount: number;
+  timestamp: Date;
+}
+
+export interface ClaimUpdatedEvent {
+  userId: string;
+  claimId: string;
+  status: string;
+  claimAmount: number;
+  notes?: string;
+  timestamp: Date;
+}
+
+@Injectable()
+export class NotificationsService {
+  private readonly logger = new Logger(NotificationsService.name);
+
+  constructor(
+    @InjectRepository(Notification)
+    private readonly notificationRepository: Repository<Notification>,
+    @InjectRepository(NotificationPreference)
+    private readonly preferenceRepository: Repository<NotificationPreference>,
+    @InjectRepository(User)
+    private readonly userRepository: Repository<User>,
+    @InjectRepository(WaitlistEntry)
+    private readonly waitlistRepository: Repository<WaitlistEntry>,
+    @InjectRepository(WaitlistEvent)
+    private readonly waitlistEventRepository: Repository<WaitlistEvent>,
+    private readonly mailService: MailService,
+  ) {}
+
+  /**
+   * Listen to sweep.completed event and create notifications
+   */
+  @OnEvent('sweep.completed')
+  async handleSweepCompleted(event: SweepCompletedEvent) {
+    this.logger.log(
+      `Processing sweep.completed event for user ${event.userId}`,
+    );
+
+    try {
+      const user = await this.userRepository.findOne({
+        where: { id: event.userId },
+      });
+
+      if (!user) {
+        this.logger.warn(
+          `User ${event.userId} not found for sweep notification`,
+        );
+        return;
+      }
+
+      const preferences = await this.getOrCreatePreferences(event.userId);
+
+      // Create in-app notification
+      if (preferences.inAppNotifications) {
+        await this.createNotification({
+          userId: event.userId,
+          type: NotificationType.SWEEP_COMPLETED,
+          title: 'Account Sweep Completed',
+          message: `Successfully swept ${event.amount} to your savings account.`,
+          metadata: {
+            amount: event.amount,
+            publicKey: event.publicKey,
+            timestamp: event.timestamp,
+          },
+        });
+      }
+
+      // Send email notification
+      if (preferences.emailNotifications && preferences.sweepNotifications) {
+        await this.mailService.sendSweepCompletedEmail(
+          user.email,
+          user.name || 'User',
+          event.amount,
+        );
+      }
+
+      this.logger.log(`Sweep notification processed for user ${event.userId}`);
+    } catch (error) {
+      this.logger.error(
+        `Error processing sweep.completed event for user ${event.userId}`,
+        error,
+      );
+    }
+  }
+
+  /**
+   * Listen to withdrawal.completed event and create notifications
+   */
+  @OnEvent('withdrawal.completed')
+  async handleWithdrawalCompleted(event: WithdrawalCompletedEvent) {
+    this.logger.log(
+      `Processing withdrawal.completed event for user ${event.userId}`,
+    );
+
+    try {
+      const user = await this.userRepository.findOne({
+        where: { id: event.userId },
+      });
+
+      if (!user) {
+        this.logger.warn(
+          `User ${event.userId} not found for withdrawal notification`,
+        );
+        return;
+      }
+
+      const preferences = await this.getOrCreatePreferences(event.userId);
+
+      const penaltyNote =
+        event.penalty > 0
+          ? ` An early withdrawal penalty of ${event.penalty} was applied.`
+          : '';
+
+      if (preferences.inAppNotifications) {
+        await this.createNotification({
+          userId: event.userId,
+          type: NotificationType.WITHDRAWAL_COMPLETED,
+          title: 'Withdrawal Completed',
+          message: `Your withdrawal of ${event.netAmount} has been completed.${penaltyNote}`,
+          metadata: {
+            withdrawalId: event.withdrawalId,
+            amount: event.amount,
+            penalty: event.penalty,
+            netAmount: event.netAmount,
+            timestamp: event.timestamp,
+          },
+        });
+      }
+
+      if (preferences.emailNotifications) {
+        await this.mailService.sendWithdrawalCompletedEmail(
+          user.email,
+          user.name || 'User',
+          String(event.amount),
+          String(event.penalty),
+          String(event.netAmount),
+        );
+      }
+
+      this.logger.log(
+        `Withdrawal notification processed for user ${event.userId}`,
+      );
+    } catch (error) {
+      this.logger.error(
+        `Error processing withdrawal.completed event for user ${event.userId}`,
+        error,
+      );
+    }
+  }
+
+  /**
+   * Listen to claim.updated event and create notifications
+   */
+  @OnEvent('claim.updated')
+  async handleClaimUpdated(event: ClaimUpdatedEvent) {
+    this.logger.log(
+      `Processing claim.updated event for claim ${event.claimId}`,
+    );
+
+    try {
+      const user = await this.userRepository.findOne({
+        where: { id: event.userId },
+      });
+
+      if (!user) {
+        this.logger.warn(
+          `User ${event.userId} not found for claim notification`,
+        );
+        return;
+      }
+
+      const preferences = await this.getOrCreatePreferences(event.userId);
+
+      // Determine notification type based on claim status
+      let notificationType = NotificationType.CLAIM_UPDATED;
+      let title = 'Claim Status Updated';
+      let message = `Your claim has been ${event.status.toLowerCase()}.`;
+
+      if (event.status === 'APPROVED') {
+        notificationType = NotificationType.CLAIM_APPROVED;
+        title = 'Claim Approved';
+        message = `Your claim for $${event.claimAmount} has been approved.`;
+      } else if (event.status === 'REJECTED') {
+        notificationType = NotificationType.CLAIM_REJECTED;
+        title = 'Claim Rejected';
+        message = `Your claim for $${event.claimAmount} has been rejected.`;
+        if (event.notes) {
+          message += ` Reason: ${event.notes}`;
+        }
+      }
+
+      // Create in-app notification
+      if (preferences.inAppNotifications) {
+        await this.createNotification({
+          userId: event.userId,
+          type: notificationType,
+          title,
+          message,
+          metadata: {
+            claimId: event.claimId,
+            status: event.status,
+            claimAmount: event.claimAmount,
+            notes: event.notes,
+            timestamp: event.timestamp,
+          },
+        });
+      }
+
+      // Send email notification
+      if (preferences.emailNotifications && preferences.claimNotifications) {
+        await this.mailService.sendClaimStatusEmail(
+          user.email,
+          user.name || 'User',
+          event.status,
+          event.claimAmount,
+          event.notes,
+        );
+      }
+
+      this.logger.log(
+        `Claim notification processed for claim ${event.claimId}`,
+      );
+    } catch (error) {
+      this.logger.error(
+        `Error processing claim.updated event for claim ${event.claimId}`,
+        error,
+      );
+    }
+  }
+
+  /**
+   * Handle goal milestone events emitted by the scheduler.
+   * Payload: { userId, goalId, percentage, goalName, metadata? }
+   */
+  @OnEvent('goal.milestone')
+  async handleGoalMilestone(event: {
+    userId: string;
+    goalId: string;
+    percentage: number;
+    goalName: string;
+    metadata?: Record<string, any>;
+  }) {
+    this.logger.log(
+      `Processing goal.milestone event for user ${event.userId} (goal ${event.goalId})`,
+    );
+
+    try {
+      const user = await this.userRepository.findOne({
+        where: { id: event.userId },
+      });
+
+      if (!user) {
+        this.logger.warn(
+          `User ${event.userId} not found for goal milestone notification`,
+        );
+        return;
+      }
+
+      const preferences = await this.getOrCreatePreferences(event.userId);
+
+      const title =
+        event.percentage === 100
+          ? `Goal complete: ${event.goalName}`
+          : `Milestone reached: ${event.percentage}%`;
+
+      const message =
+        event.percentage === 100
+          ? `Amazing — you've reached your goal "${event.goalName}"!`
+          : `You're ${event.percentage}% of the way to "${event.goalName}" — keep it up!`;
+
+      // Create in-app notification if enabled
+      if (
+        preferences.inAppNotifications &&
+        preferences.milestoneNotifications
+      ) {
+        await this.createNotification({
+          userId: event.userId,
+          type:
+            event.percentage === 100
+              ? NotificationType.GOAL_COMPLETED
+              : NotificationType.GOAL_MILESTONE,
+          title,
+          message,
+          metadata: {
+            goalId: event.goalId,
+            percentage: event.percentage,
+            ...event.metadata,
+          },
+        });
+      }
+
+      // Send email if enabled
+      if (
+        preferences.emailNotifications &&
+        preferences.milestoneNotifications
+      ) {
+        await this.mailService.sendGoalMilestoneEmail(
+          user.email,
+          user.name || 'User',
+          event.goalName,
+          event.percentage,
+        );
+      }
+
+      this.logger.log(
+        `Goal milestone notification processed for user ${event.userId} (goal ${event.goalId})`,
+      );
+    } catch (error) {
+      this.logger.error(
+        `Error processing goal.milestone event for user ${event.userId}`,
+        error,
+      );
+    }
+  }
+
+  /**
+   * Handle product availability events and notify top waitlist entries.
+   * Payload: { productId, spots }
+   */
+  @OnEvent('waitlist.product.available')
+  async handleWaitlistAvailability(event: {
+    productId: string;
+    spots?: number;
+  }) {
+    const spots = event.spots ?? 1;
+
+    try {
+      // Get top entries by priority then createdAt
+      const entries = await this.waitlistRepository
+        .createQueryBuilder('w')
+        .where('w.productId = :productId', { productId: event.productId })
+        .andWhere('w.notifiedAt IS NULL')
+        .orderBy('w.priority', 'DESC')
+        .addOrderBy('w.createdAt', 'ASC')
+        .limit(spots)
+        .getMany();
+
+      if (!entries.length) return;
+
+      for (const entry of entries) {
+        const user = await this.userRepository.findOne({
+          where: { id: entry.userId },
+        });
+
+        if (!user) continue;
+
+        const title = 'Savings product available';
+        const message = `A savings product you're waiting for is now available. Visit the app to claim your spot.`;
+
+        // In-app notification
+        const preferences = await this.getOrCreatePreferences(entry.userId);
+
+        if (preferences.inAppNotifications) {
+          await this.createNotification({
+            userId: entry.userId,
+            type: NotificationType.WAITLIST_AVAILABLE,
+            title,
+            message,
+            metadata: { productId: event.productId },
+          });
+        }
+
+        // Email notification
+        if (preferences.emailNotifications) {
+          await this.mailService.sendWaitlistAvailabilityEmail(
+            user.email,
+            user.name || 'User',
+            event.productId,
+          );
+        }
+
+        // record NOTIFY event for analytics
+        try {
+          await this.waitlistEventRepository.save(
+            this.waitlistEventRepository.create({
+              entryId: entry.id,
+              userId: entry.userId,
+              productId: event.productId,
+              type: 'NOTIFY',
+              metadata: null,
+            }),
+          );
+        } catch (e) {
+          // ignore analytics failures
+        }
+      }
+
+      // Mark entries notified
+      const ids = entries.map((e) => e.id);
+      await this.waitlistRepository
+        .createQueryBuilder()
+        .update(WaitlistEntry)
+        .set({ notifiedAt: new Date() })
+        .where('id IN (:...ids)', { ids })
+        .execute();
+    } catch (error) {
+      this.logger.error(
+        `Error handling waitlist availability for product ${event.productId}`,
+        error,
+      );
+    }
+  }
+
+  @OnEvent('savings.capacity.threshold')
+  async handleCapacityAlert(event: {
+    productId: string;
+    utilizationPercentage: number;
+    isFull: boolean;
+  }) {
+    try {
+      const admins = await this.userRepository.find({
+        where: { role: Role.ADMIN },
+        select: ['id'],
+      });
+
+      if (!admins.length) {
+        return;
+      }
+
+      const title = event.isFull
+        ? 'Savings product auto-deactivated'
+        : 'Savings product nearing capacity';
+      const message = event.isFull
+        ? `Product ${event.productId} reached maximum capacity and was auto-deactivated.`
+        : `Product ${event.productId} is ${event.utilizationPercentage}% utilized.`;
+
+      await Promise.all(
+        admins.map((admin) =>
+          this.createNotification({
+            userId: admin.id,
+            type: NotificationType.ADMIN_CAPACITY_ALERT,
+            title,
+            message,
+            metadata: event,
+          }),
+        ),
+      );
+    } catch (error) {
+      this.logger.error(
+        `Error processing savings.capacity.threshold for product ${event.productId}`,
+        error,
+      );
+    }
+  }
+
+  /**
+   * Create a notification in the database
+   */
+  async createNotification(data: {
+    userId: string;
+    type: NotificationType;
+    title: string;
+    message: string;
+    metadata?: Record<string, any>;
+  }): Promise<Notification> {
+    const notification = this.notificationRepository.create({
+      userId: data.userId,
+      type: data.type,
+      title: data.title,
+      message: data.message,
+      metadata: data.metadata || null,
+      read: false,
+    });
+
+    return await this.notificationRepository.save(notification);
+  }
+
+  /**
+   * Get user notifications with pagination
+   */
+  async getUserNotifications(
+    userId: string,
+    page: number = 1,
+    limit: number = 20,
+  ): Promise<{ notifications: Notification[]; total: number }> {
+    const [notifications, total] =
+      await this.notificationRepository.findAndCount({
+        where: { userId },
+        order: { createdAt: 'DESC' },
+        skip: (page - 1) * limit,
+        take: limit,
+      });
+
+    return { notifications, total };
+  }
+
+  /**
+   * Mark notification as read
+   */
+  async markAsRead(notificationId: string): Promise<Notification | null> {
+    await this.notificationRepository.update(
+      { id: notificationId },
+      { read: true },
+    );
+
+    const notification = await this.notificationRepository.findOne({
+      where: { id: notificationId },
+    });
+
+    return notification;
+  }
+
+  /**
+   * Mark all notifications as read for a user
+   */
+  async markAllAsRead(userId: string): Promise<void> {
+    await this.notificationRepository.update(
+      { userId, read: false },
+      { read: true },
+    );
+  }
+
+  /**
+   * Get unread notification count for user
+   */
+  async getUnreadCount(userId: string): Promise<number> {
+    return await this.notificationRepository.count({
+      where: { userId, read: false },
+    });
+  }
+
+  /**
+   * Get or create notification preferences for user
+   */
+  async getOrCreatePreferences(
+    userId: string,
+  ): Promise<NotificationPreference> {
+    let preferences = await this.preferenceRepository.findOne({
+      where: { userId },
+    });
+
+    if (!preferences) {
+      preferences = this.preferenceRepository.create({ userId });
+      preferences = await this.preferenceRepository.save(preferences);
+    }
+
+    return preferences;
+  }
+
+  /**
+   * Update notification preferences
+   */
+  async updatePreferences(
+    userId: string,
+    updates: Partial<NotificationPreference>,
+  ): Promise<NotificationPreference> {
+    let preferences = await this.getOrCreatePreferences(userId);
+
+    Object.assign(preferences, updates);
+    preferences = await this.preferenceRepository.save(preferences);
+
+    return preferences;
+  }
+
+  /**
+   * Delete old notifications (older than 30 days)
+   */
+  async deleteOldNotifications(daysOld: number = 30): Promise<void> {
+    const cutoffDate = new Date();
+    cutoffDate.setDate(cutoffDate.getDate() - daysOld);
+
+    const result = await this.notificationRepository.delete({
+      createdAt: { $lt: cutoffDate } as any,
+    });
+
+    this.logger.log(
+      `Deleted ${result.affected} notifications older than ${daysOld} days`,
+    );
+  }
+}

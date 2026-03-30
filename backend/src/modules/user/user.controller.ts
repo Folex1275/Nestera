@@ -13,13 +13,21 @@ import {
   ParseFilePipe,
   MaxFileSizeValidator,
   FileTypeValidator,
+  ClassSerializerInterceptor,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
+import {
+  ApiBearerAuth,
+  ApiOperation,
+  ApiResponse,
+  ApiTags,
+} from '@nestjs/swagger';
 import { StorageService } from '../storage/storage.service';
 import { UserService } from './user.service';
 import { SavingsService } from '../blockchain/savings.service';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { NetWorthDto } from './dto/net-worth.dto';
+import { UserProfileResponseDto } from './dto/user-profile-response.dto';
 import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 
@@ -55,6 +63,8 @@ class KycDocumentValidator extends FileValidator {
   }
 }
 
+@ApiTags('users')
+@ApiBearerAuth()
 @Controller('users')
 @UseGuards(JwtAuthGuard)
 export class UserController {
@@ -64,7 +74,44 @@ export class UserController {
     private readonly savingsService: SavingsService,
   ) {}
 
+  /**
+   * GET /users/profile
+   *
+   * Full hydrated profile for the authenticated user.
+   * Used by the frontend dashboard on boot to render the connect-wallet
+   * state, voting capabilities, and user details.
+   *
+   * - Strictly requires a valid Bearer JWT (JwtAuthGuard on the controller).
+   * - ClassSerializerInterceptor applied at method level ensures @Exclude()
+   *   on UserProfileResponseDto strips password hashes / nonces before the
+   *   JSON response is sent.
+   * - `walletAddress` is the linked Stellar public key (null if not yet linked).
+   * - `daysActive` is computed in UserService; never stored in the DB.
+   */
+  @Get('profile')
+  @UseInterceptors(ClassSerializerInterceptor)
+  @ApiOperation({
+    summary: "Get the authenticated user's full profile",
+    description:
+      'Returns id, email, name, bio, avatarUrl, walletAddress (linked Stellar key), ' +
+      'role, kycStatus, createdAt, and computed daysActive. ' +
+      'Password hashes and internal fields are always excluded.',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Profile returned successfully',
+    type: UserProfileResponseDto,
+  })
+  @ApiResponse({ status: 401, description: 'Missing or invalid JWT' })
+  @ApiResponse({ status: 404, description: 'User not found' })
+  getProfile(
+    @CurrentUser() user: { id: string },
+  ): Promise<UserProfileResponseDto> {
+    return this.userService.getProfile(user.id);
+  }
+
   @Get('me')
+  @ApiOperation({ summary: 'Get basic info for the authenticated user' })
   getMe(@CurrentUser() user: { id: string }) {
     return this.userService.findById(user.id);
   }
@@ -72,7 +119,7 @@ export class UserController {
   @Get('me/net-worth')
   async getNetWorth(@CurrentUser() user: { id: string }): Promise<NetWorthDto> {
     const userEntity = await this.userService.findById(user.id);
-    
+
     // If user has no public key, return zero balances
     if (!userEntity.publicKey) {
       return this.createZeroNetWorthResponse();
@@ -88,8 +135,10 @@ export class UserController {
     const totalNetWorth = walletBalance + totalSavings;
 
     // Calculate percentages
-    const walletPercentage = totalNetWorth > 0 ? (walletBalance / totalNetWorth) * 100 : 0;
-    const savingsPercentage = totalNetWorth > 0 ? (totalSavings / totalNetWorth) * 100 : 0;
+    const walletPercentage =
+      totalNetWorth > 0 ? (walletBalance / totalNetWorth) * 100 : 0;
+    const savingsPercentage =
+      totalNetWorth > 0 ? (totalSavings / totalNetWorth) * 100 : 0;
 
     return {
       walletBalance,
