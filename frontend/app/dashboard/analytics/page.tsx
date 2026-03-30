@@ -1,5 +1,6 @@
 import React from "react";
 import { MoreHorizontal, PieChart } from "lucide-react";
+import PortfolioPerformanceChart from "./PortfolioPerformanceChart";
 
 export const metadata = { title: "Analytics – Nestera" };
 
@@ -18,11 +19,7 @@ export default function AnalyticsPage() {
         </div>
       </div>
 
-      <div className="bg-linear-to-b from-[rgba(6,18,20,0.45)] to-[rgba(4,12,14,0.35)] border border-[rgba(8,120,120,0.06)] rounded-2xl p-8 text-center">
-        <p className="text-[#5e8c96] text-sm">
-          Analytics charts and data will appear here.
-        </p>
-      </div>
+      <PortfolioPerformanceChart />
 
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 mt-6">
         <article className="rounded-2xl border border-[rgba(8,120,120,0.06)] bg-linear-to-b from-[rgba(6,18,20,0.45)] to-[rgba(4,12,14,0.35)] p-6">
