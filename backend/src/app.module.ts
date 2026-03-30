@@ -41,6 +41,7 @@ import { TestRbacModule } from './test-rbac/test-rbac.module';
 import { TestThrottlingModule } from './test-throttling/test-throttling.module';
 import { ApiVersioningModule } from './common/versioning/api-versioning.module';
 import { BackupModule } from './modules/backup/backup.module';
+import { DataExportModule } from './modules/data-export/data-export.module';
 import { ConnectionPoolModule } from './common/database/connection-pool.module';
 import { CircuitBreakerModule } from './common/circuit-breaker/circuit-breaker.module';
 import { PostmanModule } from './common/postman/postman.module';
@@ -202,6 +203,7 @@ const envValidationSchema = Joi.object({
     TestThrottlingModule,
     ApiVersioningModule,
     BackupModule,
+    DataExportModule,
     ConnectionPoolModule,
     CircuitBreakerModule,
     PostmanModule,
