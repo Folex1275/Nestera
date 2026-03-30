@@ -15,6 +15,9 @@ import { WaitlistEntry } from './entities/waitlist-entry.entity';
 import { WaitlistEvent } from './entities/waitlist-event.entity';
 import { WaitlistService } from './waitlist.service';
 import { WaitlistController } from './waitlist.controller';
+import { SavingsExperiment } from './entities/savings-experiment.entity';
+import { SavingsExperimentAssignment } from './entities/savings-experiment-assignment.entity';
+import { ExperimentsService } from './experiments.service';
 
 @Module({
   imports: [
@@ -28,10 +31,17 @@ import { WaitlistController } from './waitlist.controller';
       User,
       WaitlistEntry,
       WaitlistEvent,
+      SavingsExperiment,
+      SavingsExperimentAssignment,
     ]),
   ],
   controllers: [SavingsController, WaitlistController],
-  providers: [SavingsService, PredictiveEvaluatorService, WaitlistService],
-  exports: [SavingsService, WaitlistService],
+  providers: [
+    SavingsService,
+    PredictiveEvaluatorService,
+    WaitlistService,
+    ExperimentsService,
+  ],
+  exports: [SavingsService, WaitlistService, ExperimentsService],
 })
 export class SavingsModule {}
