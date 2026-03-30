@@ -178,6 +178,7 @@ const envValidationSchema = Joi.object({
         };
       },
     }),
+    ScheduleModule.forRoot(),
     AuthModule,
     RedisCacheModule,
     HealthModule,
